@@ -135,6 +135,9 @@ if __name__ == '__main__':
     #model.add(Dense(200, activation="relu"))
     model.add(Dense(1, activation="sigmoid", kernel_initializer='normal'))
 
+    # summarize the model
+    print(model.summary())
+
     # train model
     model.compile(loss='binary_crossentropy',
                   optimizer='rmsprop', metrics=['accuracy'])
