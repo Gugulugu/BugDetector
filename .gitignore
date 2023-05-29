@@ -41,3 +41,5 @@ node_modules
 /venv
 /calls_eval
 /calls_training
+/model
+/predict_class.h5

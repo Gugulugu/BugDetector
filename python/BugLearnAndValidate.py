@@ -12,8 +12,19 @@ from collections import Counter, namedtuple
 import math
 import argparse
 
-from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.layers.core import Dense, Dropout
+#from tensorflow.python.keras.models import Sequential
+#from tensorflow.python.keras.layers.core import Dense, Dropout
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.layers import MultiHeadAttention, LayerNormalization, Dropout, Layer
+from tensorflow.keras.layers import Embedding, Input, GlobalAveragePooling1D, Dense
+from tensorflow.keras.datasets import imdb
+from tensorflow.keras.models import Sequential, Model
+import numpy as np
+import warnings
+warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
+
+
 
 import time
 import numpy as np
@@ -78,6 +89,40 @@ def sample_xy_pairs(xs, ys, number_buggy):
             sampled_ys.append(y)
     return sampled_xs, sampled_ys
 
+#TransformerBlock
+class TransformerBlock(Layer):
+    def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
+        super(TransformerBlock, self).__init__()
+        self.att = MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
+        self.ffn = Sequential(
+            [Dense(ff_dim, activation="relu"), 
+             Dense(embed_dim),]
+        )
+        self.layernorm1 = LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = LayerNormalization(epsilon=1e-6)
+        self.dropout1 = Dropout(rate)
+        self.dropout2 = Dropout(rate)
+
+    def call(self, inputs, training):
+        attn_output = self.att(inputs, inputs)
+        attn_output = self.dropout1(attn_output, training=training)
+        out1 = self.layernorm1(inputs + attn_output)
+        ffn_output = self.ffn(out1)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        return self.layernorm2(out1 + ffn_output)
+    
+class TokenAndPositionEmbedding(Layer):
+    def __init__(self, maxlen, vocab_size, embed_dim):
+        super(TokenAndPositionEmbedding, self).__init__()
+        self.token_emb = Embedding(input_dim=vocab_size, output_dim=embed_dim)
+        self.pos_emb = Embedding(input_dim=maxlen, output_dim=embed_dim)
+
+    def call(self, x):
+        maxlen = tf.shape(x)[-1]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        x = self.token_emb(x)
+        return x + positions
 
 if __name__ == '__main__':
     print("BugDetection started with " + str(sys.argv))
@@ -126,23 +171,37 @@ if __name__ == '__main__':
     print("Training examples   : " + str(len(xs_training)))
     print(learning_data.stats)
 
+
     # create a model (simple feedforward network)
-    model = Sequential()
-    model.add(Dropout(0.2, input_shape=(x_length,)))
-    model.add(Dense(200, input_dim=x_length,
-                    activation="relu", kernel_initializer='normal'))
-    model.add(Dropout(0.2))
-    #model.add(Dense(200, activation="relu"))
-    model.add(Dense(1, activation="sigmoid", kernel_initializer='normal'))
+    embed_dim = 32  # Embedding size for each token
+    num_heads = 2  # Number of attention heads
+    ff_dim = 32  # Hidden layer size in feed forward network inside transformer
+
+    inputs = Input(shape=(x_length,))
+    embedding_layer = TokenAndPositionEmbedding(x_length, 10000, embed_dim)
+    x = embedding_layer(inputs)
+    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
+    x = transformer_block(x)
+    x = GlobalAveragePooling1D()(x)
+    x = Dropout(0.1)(x)
+    x = Dense(20, activation="relu")(x)
+    x = Dropout(0.1)(x)
+    outputs = Dense(2, activation="softmax")(x)
+
+    model = Model(inputs=inputs, outputs=outputs)
+
+    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    #model.compile(loss='binary_crossentropy',
+    #              optimizer='rmsprop', metrics=['accuracy'])
+    
+    history = model.fit(xs_training, ys_training, 
+                        batch_size=100, epochs=20, 
+                    )
+
+    model.save_weights("predict_class.h5")
 
     # summarize the model
     print(model.summary())
-
-    # train model
-    model.compile(loss='binary_crossentropy',
-                  optimizer='rmsprop', metrics=['accuracy'])
-    history = model.fit(xs_training, ys_training,
-                        batch_size=100, epochs=10, verbose=1)
 
     time_stamp = math.floor(time.time() * 1000)
     model.save("bug_detection_model_"+str(time_stamp))
