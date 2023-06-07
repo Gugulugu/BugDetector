@@ -173,9 +173,9 @@ if __name__ == '__main__':
 
 
     # create a model (simple feedforward network)
-    embed_dim = 32  # Embedding size for each token
-    num_heads = 2  # Number of attention heads
-    ff_dim = 32  # Hidden layer size in feed forward network inside transformer
+    embed_dim = 64  # Embedding size for each token
+    num_heads = 4  # Number of attention heads
+    ff_dim = 64  # Hidden layer size in feed forward network inside transformer
 
     inputs = Input(shape=(x_length,))
     embedding_layer = TokenAndPositionEmbedding(x_length, 10000, embed_dim)
@@ -183,19 +183,19 @@ if __name__ == '__main__':
     transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
     x = transformer_block(x)
     x = GlobalAveragePooling1D()(x)
-    x = Dropout(0.1)(x)
+    x = Dropout(0.2)(x)
     x = Dense(20, activation="relu")(x)
-    x = Dropout(0.1)(x)
-    outputs = Dense(2, activation="softmax")(x)
+    x = Dropout(0.2)(x)
+    outputs = Dense(1, activation="sigmoid")(x)
 
     model = Model(inputs=inputs, outputs=outputs)
 
-    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-    #model.compile(loss='binary_crossentropy',
-    #              optimizer='rmsprop', metrics=['accuracy'])
+    #model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    model.compile(loss='binary_crossentropy',
+                  optimizer='adam', metrics=['accuracy'])
     
     history = model.fit(xs_training, ys_training, 
-                        batch_size=100, epochs=20, 
+                        batch_size=32, epochs=20, 
                     )
 
     model.save_weights("predict_class.h5")
