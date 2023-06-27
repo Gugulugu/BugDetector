@@ -184,24 +184,26 @@ if __name__ == '__main__':
     x = transformer_block(x)
     x = GlobalAveragePooling1D()(x)
     x = Dropout(0.2)(x)
-    x = Dense(20, activation="relu")(x)
+    x = Dense(200, activation="relu", kernel_initializer='normal')(x)
     x = Dropout(0.2)(x)
-    outputs = Dense(1, activation="sigmoid")(x)
+    outputs = Dense(1, activation="sigmoid", kernel_initializer='normal')(x)
 
     model = Model(inputs=inputs, outputs=outputs)
+
+
+    # summarize the model
+    print(model.summary())
 
     #model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     model.compile(loss='binary_crossentropy',
                   optimizer='adam', metrics=['accuracy'])
     
     history = model.fit(xs_training, ys_training, 
-                        batch_size=32, epochs=20, 
+                        batch_size=32, epochs=15, 
                     )
 
     model.save_weights("predict_class.h5")
 
-    # summarize the model
-    print(model.summary())
 
     time_stamp = math.floor(time.time() * 1000)
     model.save("bug_detection_model_"+str(time_stamp))
