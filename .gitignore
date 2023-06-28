@@ -43,3 +43,5 @@ node_modules
 /calls_training
 /model
 /predict_class.h5
+/merged_buggs
+/merged_buggs_origi
