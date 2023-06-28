@@ -220,7 +220,7 @@ if __name__ == '__main__':
                   optimizer='adam', metrics=['accuracy'])
     
     history = model.fit(combined_xs_training, combined_ys_training, 
-                        batch_size=32, epochs=1, 
+                        batch_size=32, epochs=10, 
                     )
 
     model.save_weights("predict_class.h5")
