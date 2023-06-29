@@ -142,7 +142,7 @@ if __name__ == '__main__':
     model.compile(loss='binary_crossentropy',
                   optimizer='rmsprop', metrics=['accuracy'])
     history = model.fit(xs_training, ys_training,
-                        batch_size=100, epochs=10, verbose=1)
+                        batch_size=100, epochs=1, verbose=1)
 
     time_stamp = math.floor(time.time() * 1000)
     model.save("bug_detection_model_"+str(time_stamp))
@@ -180,11 +180,9 @@ if __name__ == '__main__':
         # probab(changed code should be changed), expect 1
         y_prediction_changed = ys_prediction[idx + 1][0]
         # higher means more likely to be anomaly in current code
-        anomaly_score = learning_data.anomaly_score(
-            y_prediction_orig, y_prediction_changed)
+        anomaly_score = y_prediction_orig
         # higher means more likely to be correct in current code
-        normal_score = learning_data.normal_score(
-            y_prediction_orig, y_prediction_changed)
+        normal_score = y_prediction_changed
         is_anomaly = False
         for threshold_raw in range(1, 20, 1):
             threshold = threshold_raw / 20.0
