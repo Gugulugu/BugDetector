@@ -23,7 +23,8 @@ from tensorflow.keras.models import Sequential, Model
 import numpy as np
 import warnings
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
-
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
 import time
@@ -61,7 +62,7 @@ def prepare_xy_pairs(gen_negatives, data_paths, learning_data):
     code_pieces = []
 
     for code_piece in Util.DataReader(data_paths):
-        learning_data.code_to_xy_pairs(gen_negatives, code_piece, xs, ys,
+        learning_data.code_to_xy_str(gen_negatives, code_piece, xs, ys,
                                        name_to_vector, type_to_vector, node_type_to_vector, code_pieces)
     x_length = len(xs[0])
 
@@ -125,7 +126,6 @@ class TokenAndPositionEmbedding(Layer):
         #x = tf.reshape(x, [-1, maxlen, 1])  # Reshape the input tensor
         return x + positions
 
-
 if __name__ == '__main__':
     print("BugDetection started with " + str(sys.argv))
     time_start = time.time()
@@ -173,14 +173,24 @@ if __name__ == '__main__':
     print("Training examples   : " + str(len(xs_training)))
     print(learning_data.stats)
 
+    print([xs_training[0:10]])
+    # Tokenize the data
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts(xs_training)
+    sequences = tokenizer.texts_to_sequences(xs_training)
+
+    # Pad sequences to ensure equal length
+    max_len = max(len(seq) for seq in sequences)
+    xs_training_padded_sequences = pad_sequences(sequences, maxlen=max_len)
+    vocab_size = len(tokenizer.word_index) + 1
 
     # create a model (simple feedforward network)
     embed_dim = 64  # Embedding size for each token
     num_heads = 4  # Number of attention heads
     ff_dim = 64  # Hidden layer size in feed forward network inside transformer
 
-    inputs = Input(shape=(x_length,))
-    embedding_layer = TokenAndPositionEmbedding(x_length, 10000, embed_dim)
+    inputs = Input(shape=(max_len,))
+    embedding_layer = TokenAndPositionEmbedding(max_len, vocab_size, embed_dim)
     x = embedding_layer(inputs)
     transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
     x = transformer_block(x)
@@ -208,7 +218,7 @@ if __name__ == '__main__':
     model.compile(loss='binary_crossentropy',
                   optimizer=optimizer, metrics=['accuracy'])
     
-    history = model.fit(xs_training, ys_training, 
+    history = model.fit(xs_training_padded_sequences, ys_training, 
                         batch_size=32, epochs=20, 
                     )
 
