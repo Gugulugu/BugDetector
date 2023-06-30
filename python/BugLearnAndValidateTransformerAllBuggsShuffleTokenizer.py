@@ -11,13 +11,16 @@ from os import getcwd
 from collections import Counter, namedtuple
 import math
 import argparse
-
+import os
+import gc
+import random
+#os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 #from tensorflow.python.keras.models import Sequential
 #from tensorflow.python.keras.layers.core import Dense, Dropout
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.layers import MultiHeadAttention, LayerNormalization, Dropout, Layer
-from tensorflow.keras.layers import Embedding, Input, GlobalAveragePooling1D, Dense
+from tensorflow.keras.layers import Embedding, Input, GlobalAveragePooling1D, Dense, Flatten
 from tensorflow.keras.datasets import imdb
 from tensorflow.keras.models import Sequential, Model
 import numpy as np
@@ -25,6 +28,8 @@ import warnings
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+
 
 
 import time
@@ -39,17 +44,23 @@ import LearningDataIncorrectAssignment
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--pattern", help="Kind of data to extract", choices=["SwappedArgs", "BinOperator", "SwappedBinOperands", "IncorrectBinaryOperand", "IncorrectAssignment"], required=True)
-parser.add_argument(
     "--token_emb", help="JSON file with token embeddings", required=True)
 parser.add_argument(
     "--type_emb", help="JSON file with type embeddings", required=True)
 parser.add_argument(
     "--node_emb", help="JSON file with AST node embeddings", required=True)
 parser.add_argument(
-    "--training_data", help="JSON files with training data", required=True, nargs="+")
+    "--training_data_Swapped", help="JSON files with training data", required=True, nargs="+")
 parser.add_argument(
-    "--validation_data", help="JSON files with validation data", required=True, nargs="+")
+    "--training_data_BinOp", help="JSON files with training data", required=True, nargs="+")
+parser.add_argument(
+    "--training_data_IncBinOp", help="JSON files with training data", required=True, nargs="+")
+parser.add_argument(
+    "--validation_data_Swapped", help="JSON files with validation data", required=True, nargs="+")
+parser.add_argument(
+    "--validation_data_BinOp", help="JSON files with validation data", required=True, nargs="+")
+parser.add_argument(
+    "--validation_data_IncBinOp", help="JSON files with validation data", required=True, nargs="+")
 
 
 Anomaly = namedtuple("Anomaly", ["message", "score"])
@@ -90,6 +101,7 @@ def sample_xy_pairs(xs, ys, number_buggy):
             sampled_ys.append(y)
     return sampled_xs, sampled_ys
 
+
 #TransformerBlock
 class TransformerBlock(Layer):
     def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
@@ -123,20 +135,24 @@ class TokenAndPositionEmbedding(Layer):
         positions = tf.range(start=0, limit=maxlen, delta=1)
         positions = self.pos_emb(positions)
         x = self.token_emb(x)
-        #x = tf.reshape(x, [-1, maxlen, 1])  # Reshape the input tensor
         return x + positions
 
 if __name__ == '__main__':
     print("BugDetection started with " + str(sys.argv))
     time_start = time.time()
-
+    training_data_paths_list = []
+    validation_data_paths_list = []
     args = parser.parse_args()
-    pattern = args.pattern
     name_to_vector_file = args.token_emb
     type_to_vector_file = args.type_emb
     node_type_to_vector_file = args.node_emb
-    training_data_paths = args.training_data
-    validation_data_paths = args.validation_data
+    training_data_paths_list.append(args.training_data_Swapped)
+    training_data_paths_list.append(args.training_data_BinOp)
+    training_data_paths_list.append(args.training_data_IncBinOp)
+    validation_data_paths_list.append(args.validation_data_Swapped)
+    validation_data_paths_list.append(args.validation_data_BinOp)
+    validation_data_paths_list.append(args.validation_data_IncBinOp)
+
 
     with open(name_to_vector_file) as f:
         name_to_vector = json.load(f)
@@ -145,68 +161,108 @@ if __name__ == '__main__':
     with open(node_type_to_vector_file) as f:
         node_type_to_vector = json.load(f)
 
-    if pattern == "SwappedArgs":
-        learning_data = LearningDataSwappedArgs.LearningData()
-    elif pattern == "BinOperator":
-        learning_data = LearningDataBinOperator.LearningData()
-    elif pattern == "SwappedBinOperands":
-        learning_data = LearningDataSwappedBinOperands.LearningData()
-    elif pattern == "IncorrectBinaryOperand":
-        learning_data = LearningDataIncorrectBinaryOperand.LearningData()
-    elif pattern == "IncorrectAssignment":
-        learning_data = LearningDataIncorrectAssignment.LearningData()
-    else:
-        raise Exception(f"Unexpected bug pattern: {pattern}")
-    # not yet implemented
-    # elif pattern == "MissingArg":
-    ##    learning_data = LearningDataMissingArg.LearningData()
+    
+    learning_data_objects = []
+    learning_data_objects.append(LearningDataSwappedArgs.LearningData())
+    learning_data_objects.append(LearningDataBinOperator.LearningData())
+    learning_data_objects.append(LearningDataIncorrectBinaryOperand.LearningData())
 
-    print("Statistics on training data:")
-    learning_data.pre_scan(training_data_paths, validation_data_paths)
+    all_xs_training = []
+    all_ys_training = []
+    all_xs_validation = []
+    all_ys_validation = []
+    all_code_pieces_validation = []
+    val_lengths = []
 
-    # prepare x,y pairs for learning and validation, therefore generate negatives
-    print("Preparing xy pairs for training data:")
-    learning_data.resetStats()
-    xs_training, ys_training, _ = prepare_xy_pairs(
-        True, training_data_paths, learning_data)
-    x_length = len(xs_training[0])
-    print("Training examples   : " + str(len(xs_training)))
-    print(learning_data.stats)
+    
+    for i in range(len(learning_data_objects)):
 
-    # prepare validation data
-    print("Preparing xy pairs for validation data:")
-    learning_data.resetStats()
-    xs_validation, ys_validation, code_pieces_validation = prepare_xy_pairs(
-        True, validation_data_paths, learning_data)
-    print("Validation examples : " + str(len(xs_validation)))
-    print(learning_data.stats)
+        print("Statistics on training data:")
+        learning_data_objects[i].pre_scan(training_data_paths_list[i], validation_data_paths_list[i])
+        # prepare x,y pairs for learning and validation, therefore generate negatives
+        print("Preparing xy pairs for training data:")
+        learning_data_objects[i].resetStats()
+        xs_training, ys_training, _ = prepare_xy_pairs(
+            True, training_data_paths_list[i], learning_data_objects[i])
+        
+        print("Preparing xy pairs for validation data:")
+        learning_data_objects[i].resetStats()
+        xs_validation, ys_validation, code_pieces_validation = prepare_xy_pairs(
+            True, validation_data_paths_list[i], learning_data_objects[i])
+        
+
+        val_lengths.append(len(xs_validation)) # store length of every learning object
+        all_xs_training.append(xs_training)  # Append padded tensors to the list
+        all_ys_training.append(ys_training)  # Append padded tensors to the list
+        all_xs_validation.append(xs_validation)  # Append padded tensors to the list
+        all_ys_validation.append(ys_validation)  # Append padded tensors to the list
+        all_code_pieces_validation.append(code_pieces_validation)  # Append padded tensors to the list
+ 
+        print("Validation examples   : " + str(len(xs_validation)))
+        print("Training examples   : " + str(len(xs_training)))
+        print(learning_data_objects[i].stats)
+    
+    print(val_lengths)
+    print(learning_data_objects)
+
+    # Flatten all_xs_training and all_ys_training
+    all_xs_training = [item for sublist in all_xs_training for item in sublist]
+    all_ys_training = [item for sublist in all_ys_training for item in sublist]
+    all_xs_validation = [item for sublist in all_xs_validation for item in sublist]
+    all_ys_validation = [item for sublist in all_ys_validation for item in sublist]
+    all_code_pieces_validation = [item for sublist in all_code_pieces_validation for item in sublist]
+
+    zip_training = list(zip(all_xs_training, all_ys_training))
+    #zip_validation = list(zip(all_xs_validation, all_ys_validation, all_code_pieces_validation))
+    random.shuffle(zip_training)
+    #random.shuffle(zip_validation)
+
+    all_xs_training, all_ys_training = zip(*zip_training)
+    #all_xs_validation, all_ys_validation, all_code_pieces_validation = zip(*zip_validation)
+
+    # all_xs_training to numpy array
+    all_xs_training = np.array(all_xs_training)
+    all_ys_training = np.array(all_ys_training)
+    all_ys_validation = np.array(all_ys_validation)
+    all_xs_validation = np.array(all_xs_validation)
+
+
 
     # Tokenize the data training/validation
     tokenizer = Tokenizer(oov_token = True)
-    tokenizer.fit_on_texts(xs_training)
-    tokenizer.fit_on_texts(xs_validation)
-    sequences_train = tokenizer.texts_to_sequences(xs_training)
-    sequences_val = tokenizer.texts_to_sequences(xs_validation)
+    tokenizer.fit_on_texts(all_xs_training)
+    tokenizer.fit_on_texts(all_xs_validation)
+    sequences_train = tokenizer.texts_to_sequences(all_xs_training)
+    sequences_val = tokenizer.texts_to_sequences(all_xs_validation)
 
     # Pad sequences to ensure equal length training
-    max_len_train = max(len(seq) for seq in sequences_train)
-    xs_training_padded_sequences = pad_sequences(sequences_train, maxlen=max_len_train)
+    max_len = max(len(seq) for seq in sequences_train)
+    xs_training_padded_sequences = pad_sequences(sequences_train, maxlen=max_len)
     vocab_size = len(tokenizer.word_index) + 1
 
     # Pad sequences to ensure equal length validation
-    max_len_val = max(len(seq) for seq in sequences_val)
-    xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len_val)
+    #max_len_val = max(len(seq) for seq in sequences_val)
+    xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len)
     
-    print(xs_training_padded_sequences[0:10])
-    print(xs_validation_padded_sequences.shape)
+    print(xs_validation_padded_sequences)
+
+    # free memory
+    #del xs_training_padded
+    #del combined_xs_training
+    #del combined_ys_training
+    #del indices
+    #del shuffled_xs_training
+    #del shuffled_ys_training
+    #del shuffled_indices
+    gc.collect()
 
     # create a model (simple feedforward network)
     embed_dim = 64  # Embedding size for each token
     num_heads = 4  # Number of attention heads
     ff_dim = 64  # Hidden layer size in feed forward network inside transformer
 
-    inputs = Input(shape=(max_len_train,))
-    embedding_layer = TokenAndPositionEmbedding(max_len_train, vocab_size, embed_dim)
+    inputs = Input(shape=(max_len,))
+    embedding_layer = TokenAndPositionEmbedding(max_len, vocab_size, embed_dim)
     x = embedding_layer(inputs)
     transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
     x = transformer_block(x)
@@ -222,20 +278,12 @@ if __name__ == '__main__':
     # summarize the model
     print(model.summary())
 
-    initial_learning_rate = 0.001
-    #lr_schedule = keras.optimizers.schedules.ExponentialDecay(
-    #    initial_learning_rate, decay_steps=10000, decay_rate=0.96, staircase=True
-    #)
-
-    optimizer = keras.optimizers.Adam(learning_rate=initial_learning_rate)
-
-
     #model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     model.compile(loss='binary_crossentropy',
-                  optimizer=optimizer, metrics=['accuracy'])
+                  optimizer='adam', metrics=['accuracy'])
     
-    history = model.fit(xs_training_padded_sequences, ys_training, 
-                        batch_size=100, epochs=15, 
+    history = model.fit(xs_training_padded_sequences, all_ys_training, 
+                        batch_size=100, epochs=20, 
                     )
 
     model.save_weights("predict_class.h5")
@@ -247,10 +295,14 @@ if __name__ == '__main__':
     time_learning_done = time.time()
     print("Time for learning (seconds): " +
           str(round(time_learning_done - time_start)))
+    
 
+    #del shuffled_xs_training
+    #del shuffled_ys_training
+    gc.collect()
 
-    # validate the model
-    validation_loss = model.evaluate(xs_validation_padded_sequences, ys_validation)
+     # validate the model
+    validation_loss = model.evaluate(xs_validation_padded_sequences, all_ys_validation)
     print()
     print("Validation loss & accuracy: " + str(validation_loss))
 
@@ -270,11 +322,24 @@ if __name__ == '__main__':
         # probab(changed code should be changed), expect 1
         y_prediction_changed = ys_prediction[idx + 1][0]
         # higher means more likely to be anomaly in current code
-        anomaly_score = learning_data.anomaly_score(
-            y_prediction_orig, y_prediction_changed)
-        # higher means more likely to be correct in current code
-        normal_score = learning_data.normal_score(
-            y_prediction_orig, y_prediction_changed)
+        if idx < val_lengths[0]:
+            anomaly_score = learning_data_objects[0].anomaly_score(
+                y_prediction_orig, y_prediction_changed)
+            # higher means more likely to be correct in current code
+            normal_score = learning_data_objects[0].normal_score(
+                y_prediction_orig, y_prediction_changed)
+        elif idx < (val_lengths[0] + val_lengths[1]):
+            anomaly_score = learning_data_objects[1].anomaly_score(
+                y_prediction_orig, y_prediction_changed)
+            # higher means more likely to be correct in current code
+            normal_score = learning_data_objects[1].normal_score(
+                y_prediction_orig, y_prediction_changed)   
+        else:
+            anomaly_score = learning_data_objects[2].anomaly_score(
+                y_prediction_orig, y_prediction_changed)
+            # higher means more likely to be correct in current code
+            normal_score = learning_data_objects[2].normal_score(
+                y_prediction_orig, y_prediction_changed) 
         is_anomaly = False
         for threshold_raw in range(1, 20, 1):
             threshold = threshold_raw / 20.0
@@ -298,7 +363,7 @@ if __name__ == '__main__':
                 is_anomaly = True
 
         if is_anomaly:
-            code_piece = code_pieces_validation[idx]
+            code_piece = all_code_pieces_validation[idx]
             message = "Score : " + \
                 str(anomaly_score) + " | " + code_piece.to_message()
 #             print("Possible anomaly: "+message)
@@ -316,7 +381,6 @@ if __name__ == '__main__':
     print("Time for prediction (seconds): " +
           str(round(time_prediction_done - time_learning_done)))
 
-    print()
     for threshold_raw in range(1, 20, 1):
         threshold = threshold_raw / 20.0
         recall = (
@@ -324,9 +388,13 @@ if __name__ == '__main__':
         precision = 1 - \
             ((threshold_to_warnings_in_orig_code[threshold]
               * 1.0) / (len(xs_validation_padded_sequences) / 2))
+        
+        #print(threshold_to_correct[threshold])
+        #print(threshold_to_incorrect[threshold])
         if threshold_to_correct[threshold] + threshold_to_incorrect[threshold] > 0:
             accuracy = threshold_to_correct[threshold] * 1.0 / (
                 threshold_to_correct[threshold] + threshold_to_incorrect[threshold])
+            #print(accuracy)
         else:
             accuracy = 0.0
         print("Threshold: " + str(threshold) + "   Accuracy: " + str(round(accuracy, 4)) + "   Recall: " + str(round(recall, 4)
