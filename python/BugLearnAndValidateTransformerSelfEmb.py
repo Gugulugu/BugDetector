@@ -181,8 +181,10 @@ if __name__ == '__main__':
     print("Validation examples : " + str(len(xs_validation)))
     print(learning_data.stats)
 
-    # Tokenize the data training/validation
-    tokenizer = Tokenizer(oov_token = True)
+    print(xs_training[0:10])
+
+
+    tokenizer = Tokenizer(oov_token = 'unknown',filters = '', lower = False)
     tokenizer.fit_on_texts(xs_training)
     tokenizer.fit_on_texts(xs_validation)
     sequences_train = tokenizer.texts_to_sequences(xs_training)
@@ -194,15 +196,15 @@ if __name__ == '__main__':
     vocab_size = len(tokenizer.word_index) + 1
 
     # Pad sequences to ensure equal length validation
-    max_len_val = max(len(seq) for seq in sequences_val)
-    xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len_val)
+    #max_len_val = max(len(seq) for seq in sequences_val)
+    xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len_train)
     
     print(xs_training_padded_sequences[0:10])
     print(xs_validation_padded_sequences.shape)
 
     # create a model (simple feedforward network)
     embed_dim = 64  # Embedding size for each token
-    num_heads = 4  # Number of attention heads
+    num_heads = 12  # Number of attention heads
     ff_dim = 64  # Hidden layer size in feed forward network inside transformer
 
     inputs = Input(shape=(max_len_train,))
@@ -212,9 +214,9 @@ if __name__ == '__main__':
     x = transformer_block(x)
     x = GlobalAveragePooling1D()(x)
     x = Dropout(0.2)(x)
-    x = Dense(200, activation="relu", kernel_initializer='normal')(x)
+    x = Dense(200, activation="relu")(x)
     x = Dropout(0.2)(x)
-    outputs = Dense(1, activation="sigmoid", kernel_initializer='normal')(x)
+    outputs = Dense(1, activation="sigmoid")(x)
 
     model = Model(inputs=inputs, outputs=outputs)
 
@@ -235,7 +237,7 @@ if __name__ == '__main__':
                   optimizer=optimizer, metrics=['accuracy'])
     
     history = model.fit(xs_training_padded_sequences, ys_training, 
-                        batch_size=100, epochs=15, 
+                        batch_size=64, epochs=15, 
                     )
 
     model.save_weights("predict_class.h5")

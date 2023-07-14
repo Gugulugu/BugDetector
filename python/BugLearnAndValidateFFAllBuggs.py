@@ -160,6 +160,7 @@ if __name__ == '__main__':
     print('shape of array :', combined_xs_training.shape)
 
     x_length = len(combined_xs_training[0]) 
+    print(x_length)
 
     # create a model (simple feedforward network)
     model = Sequential()
@@ -181,7 +182,7 @@ if __name__ == '__main__':
                   optimizer='adam', metrics=['accuracy'])
     
     history = model.fit(shuffled_xs_training, shuffled_ys_training, 
-                        batch_size=100, epochs=30, 
+                        batch_size=64, epochs=15, 
                     )
 
     model.save_weights("predict_class.h5")
@@ -214,7 +215,7 @@ if __name__ == '__main__':
             True, validation_data_paths_list[i], learning_data_objects[i])
         
 
-        xs_validation_padded = tf.pad(xs_validation, [[0, 0], [0, 1210 - xs_validation.shape[1]]], constant_values=0)  # Pad xs_training with zeros to match [x, 1210] shape
+        xs_validation_padded = tf.pad(xs_validation, [[0, 0], [0, x_length - xs_validation.shape[1]]], constant_values=0)  # Pad xs_training with zeros to match [x, 1210] shape
 
         all_xs_validation.append(xs_validation_padded)  # Append padded tensors to the list
         all_ys_validation.append(ys_validation)  # Append padded tensors to the list
@@ -230,14 +231,8 @@ if __name__ == '__main__':
     shuffled_indices = tf.random.shuffle(indices, seed=42)
     shuffled_tensor_xs_validation = tf.gather(combined_xs_validation, shuffled_indices)
     shuffled_tensor_ys_validation = tf.gather(combined_ys_validation, shuffled_indices)
-    #shuffled_code_piece = tf.gather(combined_code_pieces, shuffled_indices)
-    
-    # shuffledindices as list
-    #indices_list = shuffled_indices.numpy().tolist()
-    # flatten all_code_pieces_validation
+
     all_code_pieces_validation = [item for sublist in all_code_pieces_validation for item in sublist]
-    # shuffle all_code_pieces_validation
-    #all_code_pieces_validation = [all_code_pieces_validation[i] for i in indices_list]
 
      # validate the model
     validation_loss = model.evaluate(shuffled_tensor_xs_validation, shuffled_tensor_ys_validation)

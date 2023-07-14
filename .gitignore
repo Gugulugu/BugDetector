@@ -45,3 +45,6 @@ node_modules
 /predict_class.h5
 /merged_buggs
 /merged_buggs_origi
+/binops_eval
+/binops_training
+/logs

@@ -11,9 +11,11 @@ from os import getcwd
 from collections import Counter, namedtuple
 import math
 import argparse
+from sklearn import utils
 
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers.core import Dense, Dropout
+
 
 import time
 import numpy as np
@@ -126,6 +128,9 @@ if __name__ == '__main__':
     print("Training examples   : " + str(len(xs_training)))
     print(learning_data.stats)
 
+    #xs_training, ys_training = utils.shuffle(xs_training, ys_training)
+
+
     # create a model (simple feedforward network)
     model = Sequential()
     model.add(Dropout(0.2, input_shape=(x_length,)))
@@ -142,7 +147,7 @@ if __name__ == '__main__':
     model.compile(loss='binary_crossentropy',
                   optimizer='rmsprop', metrics=['accuracy'])
     history = model.fit(xs_training, ys_training,
-                        batch_size=100, epochs=15, verbose=1)
+                        batch_size=64, epochs=15, verbose=1)
 
     time_stamp = math.floor(time.time() * 1000)
     model.save("bug_detection_model_"+str(time_stamp))
@@ -158,6 +163,9 @@ if __name__ == '__main__':
         True, validation_data_paths, learning_data)
     print("Validation examples : " + str(len(xs_validation)))
     print(learning_data.stats)
+
+    #xs_validation, ys_validation = utils.shuffle(xs_validation, ys_validation)
+
 
     # validate the model
     validation_loss = model.evaluate(xs_validation, ys_validation)

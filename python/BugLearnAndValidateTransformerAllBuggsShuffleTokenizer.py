@@ -213,12 +213,12 @@ if __name__ == '__main__':
     all_code_pieces_validation = [item for sublist in all_code_pieces_validation for item in sublist]
 
     zip_training = list(zip(all_xs_training, all_ys_training))
-    #zip_validation = list(zip(all_xs_validation, all_ys_validation, all_code_pieces_validation))
+    zip_validation = list(zip(all_xs_validation, all_ys_validation, all_code_pieces_validation))
     random.shuffle(zip_training)
-    #random.shuffle(zip_validation)
+    random.shuffle(zip_validation)
 
     all_xs_training, all_ys_training = zip(*zip_training)
-    #all_xs_validation, all_ys_validation, all_code_pieces_validation = zip(*zip_validation)
+    all_xs_validation, all_ys_validation, all_code_pieces_validation = zip(*zip_validation)
 
     # all_xs_training to numpy array
     all_xs_training = np.array(all_xs_training)
@@ -229,7 +229,7 @@ if __name__ == '__main__':
 
 
     # Tokenize the data training/validation
-    tokenizer = Tokenizer(oov_token = True)
+    tokenizer = Tokenizer(oov_token = 'unknown',filters = '', lower = False)
     tokenizer.fit_on_texts(all_xs_training)
     tokenizer.fit_on_texts(all_xs_validation)
     sequences_train = tokenizer.texts_to_sequences(all_xs_training)
@@ -246,20 +246,12 @@ if __name__ == '__main__':
     
     print(xs_validation_padded_sequences)
 
-    # free memory
-    #del xs_training_padded
-    #del combined_xs_training
-    #del combined_ys_training
-    #del indices
-    #del shuffled_xs_training
-    #del shuffled_ys_training
-    #del shuffled_indices
-    gc.collect()
+
 
     # create a model (simple feedforward network)
-    embed_dim = 64  # Embedding size for each token
-    num_heads = 4  # Number of attention heads
-    ff_dim = 64  # Hidden layer size in feed forward network inside transformer
+    embed_dim = 256  # Embedding size for each token
+    num_heads = 12  # Number of attention heads
+    ff_dim = 128  # Hidden layer size in feed forward network inside transformer
 
     inputs = Input(shape=(max_len,))
     embedding_layer = TokenAndPositionEmbedding(max_len, vocab_size, embed_dim)
@@ -283,7 +275,7 @@ if __name__ == '__main__':
                   optimizer='adam', metrics=['accuracy'])
     
     history = model.fit(xs_training_padded_sequences, all_ys_training, 
-                        batch_size=100, epochs=20, 
+                        batch_size=64, epochs=10, 
                     )
 
     model.save_weights("predict_class.h5")
