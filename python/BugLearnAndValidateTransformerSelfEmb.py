@@ -35,11 +35,12 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
+import LearningDataIncorrectArgsType
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--pattern", help="Kind of data to extract", choices=["SwappedArgs", "BinOperator", "SwappedBinOperands", "IncorrectBinaryOperand", "IncorrectAssignment"], required=True)
+    "--pattern", help="Kind of data to extract", choices=["SwappedArgs", "BinOperator", "SwappedBinOperands", "IncorrectBinaryOperand", "IncorrectAssignment", "IncorrectArgsType"], required=True)
 parser.add_argument(
     "--token_emb", help="JSON file with token embeddings", required=True)
 parser.add_argument(
@@ -155,6 +156,8 @@ if __name__ == '__main__':
         learning_data = LearningDataIncorrectBinaryOperand.LearningData()
     elif pattern == "IncorrectAssignment":
         learning_data = LearningDataIncorrectAssignment.LearningData()
+    elif pattern == "IncorrectArgsType":
+        learning_data = LearningDataIncorrectArgsType.LearningData()
     else:
         raise Exception(f"Unexpected bug pattern: {pattern}")
     # not yet implemented
