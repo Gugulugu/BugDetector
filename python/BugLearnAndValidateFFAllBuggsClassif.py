@@ -12,7 +12,8 @@ from collections import Counter, namedtuple
 import math
 import argparse
 import os
-os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
+import gc
+#os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 #from tensorflow.python.keras.models import Sequential
 #from tensorflow.python.keras.layers.core import Dense, Dropout
 import tensorflow as tf
@@ -35,11 +36,6 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
-import TransformerBlock
-import TokenAndPositionEmbedding
-
-
-
 
 
 parser = argparse.ArgumentParser()
@@ -73,7 +69,7 @@ def prepare_xy_pairs(gen_negatives, data_paths, learning_data):
     code_pieces = []
 
     for code_piece in Util.DataReader(data_paths):
-        learning_data.code_to_xy_pairs(gen_negatives, code_piece, xs, ys,
+        learning_data.code_to_xy_pairs_categorical(gen_negatives, code_piece, xs, ys,
                                        name_to_vector, type_to_vector, node_type_to_vector, code_pieces)
     x_length = len(xs[0])
 
@@ -100,7 +96,6 @@ def sample_xy_pairs(xs, ys, number_buggy):
             sampled_xs.append(x)
             sampled_ys.append(y)
     return sampled_xs, sampled_ys
-
 
 if __name__ == '__main__':
     print("BugDetection started with " + str(sys.argv))
@@ -154,45 +149,42 @@ if __name__ == '__main__':
         print("Training examples   : " + str(len(xs_training)))
         print(learning_data_objects[i].stats)
 
-    # combine all training data to one tensor
+    # combine all training data to one tensor and shuffle
     combined_xs_training = tf.concat(all_xs_training, axis=0)
     combined_ys_training = tf.concat(all_ys_training, axis=0)
+    indices = tf.range(start=0, limit=tf.shape(combined_xs_training)[0], dtype=tf.int32)
+    shuffled_indices = tf.random.shuffle(indices, seed=42)
+    shuffled_xs_training = tf.gather(combined_xs_training, shuffled_indices)
+    shuffled_ys_training = tf.gather(combined_ys_training, shuffled_indices)
     print(tf.shape(combined_xs_training))
     print('shape of array :', combined_xs_training.shape)
 
-
     x_length = len(combined_xs_training[0]) 
-
+    print(x_length)
 
     # create a model (simple feedforward network)
-    embed_dim = 64  # Embedding size for each token
-    num_heads = 4  # Number of attention heads
-    ff_dim = 64  # Hidden layer size in feed forward network inside transformer
-
-    inputs = Input(shape=(x_length,))
-    embedding_layer = TokenAndPositionEmbedding(x_length, 10000, embed_dim)
-    x = embedding_layer(inputs)
-    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
-    x = transformer_block(x)
-    x = GlobalAveragePooling1D()(x)
-    x = Dropout(0.2)(x)
-    x = Dense(200, activation="relu", kernel_initializer='normal')(x)
-    x = Dropout(0.2)(x)
-    outputs = Dense(1, activation="sigmoid", kernel_initializer='normal')(x)
-
-    model = Model(inputs=inputs, outputs=outputs)
+    model = Sequential()
+    model.add(Dropout(0.2, input_shape=(x_length,)))
+    model.add(Dense(200, input_dim=x_length,
+                    activation="relu", kernel_initializer='normal'))
+    model.add(Dropout(0.2))
+    model.add(Flatten())
+    #model.add(Dense(200, activation="relu"))
+    model.add(Dense(4, activation="softmax", kernel_initializer='normal'))
 
 
     # summarize the model
     print(model.summary())
 
     #model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-    model.compile(loss='binary_crossentropy',
+    model.compile(loss='sparse_categorical_crossentropy',
                   optimizer='adam', metrics=['accuracy'])
     
-    history = model.fit(combined_xs_training, combined_ys_training, 
-                        batch_size=32, epochs=10, 
+    history = model.fit(shuffled_xs_training, shuffled_ys_training, 
+                        batch_size=64, epochs=15, 
                     )
+    
+    
 
     model.save_weights("predict_class.h5")
 
@@ -203,6 +195,12 @@ if __name__ == '__main__':
     time_learning_done = time.time()
     print("Time for learning (seconds): " +
           str(round(time_learning_done - time_start)))
+    
+    del combined_xs_training
+    del combined_ys_training
+    del shuffled_xs_training
+    del shuffled_ys_training
+    gc.collect()
 
     # prepare validation data
     all_xs_validation = []
@@ -218,7 +216,7 @@ if __name__ == '__main__':
             True, validation_data_paths_list[i], learning_data_objects[i])
         
 
-        xs_validation_padded = tf.pad(xs_validation, [[0, 0], [0, 1210 - xs_validation.shape[1]]], constant_values=0)  # Pad xs_training with zeros to match [x, 1210] shape
+        xs_validation_padded = tf.pad(xs_validation, [[0, 0], [0, x_length - xs_validation.shape[1]]], constant_values=0)  # Pad xs_training with zeros to match [x, 1210] shape
 
         all_xs_validation.append(xs_validation_padded)  # Append padded tensors to the list
         all_ys_validation.append(ys_validation)  # Append padded tensors to the list
@@ -227,14 +225,18 @@ if __name__ == '__main__':
         print("Validation examples   : " + str(len(xs_validation)))
         print(learning_data_objects[i].stats)
 
-    # combine all validation data to one tensor
+    # combine all validation data to one tensor and shuffle
     combined_xs_validation = tf.concat(all_xs_validation, axis=0)
     combined_ys_validation = tf.concat(all_ys_validation, axis=0)
-    # flatten all code pieces
+    indices = tf.range(start=0, limit=tf.shape(combined_xs_validation)[0], dtype=tf.int32)
+    shuffled_indices = tf.random.shuffle(indices, seed=42)
+    shuffled_tensor_xs_validation = tf.gather(combined_xs_validation, shuffled_indices)
+    shuffled_tensor_ys_validation = tf.gather(combined_ys_validation, shuffled_indices)
+
     all_code_pieces_validation = [item for sublist in all_code_pieces_validation for item in sublist]
 
-    # validate the model
-    validation_loss = model.evaluate(combined_xs_validation, combined_ys_validation)
+     # validate the model
+    validation_loss = model.evaluate(shuffled_tensor_xs_validation, shuffled_tensor_ys_validation)
     print()
     print("Validation loss & accuracy: " + str(validation_loss))
 
@@ -302,10 +304,10 @@ if __name__ == '__main__':
     for threshold_raw in range(1, 20, 1):
         threshold = threshold_raw / 20.0
         recall = (
-            threshold_to_found_seeded_bugs[threshold] * 1.0) / (len(xs_validation) / 2)
+            threshold_to_found_seeded_bugs[threshold] * 1.0) / (len(combined_xs_validation) / 2)
         precision = 1 - \
             ((threshold_to_warnings_in_orig_code[threshold]
-              * 1.0) / (len(xs_validation) / 2))
+              * 1.0) / (len(combined_xs_validation) / 2))
         if threshold_to_correct[threshold] + threshold_to_incorrect[threshold] > 0:
             accuracy = threshold_to_correct[threshold] * 1.0 / (
                 threshold_to_correct[threshold] + threshold_to_incorrect[threshold])

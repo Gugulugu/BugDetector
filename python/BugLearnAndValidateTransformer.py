@@ -34,6 +34,10 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
+import python.Transformer as Transformer
+import TokenAndPositionEmbedding
+
+
 
 
 parser = argparse.ArgumentParser()
@@ -90,9 +94,9 @@ def sample_xy_pairs(xs, ys, number_buggy):
     return sampled_xs, sampled_ys
 
 #TransformerBlock
-class TransformerBlock(Layer):
+class Transformer(Layer):
     def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
-        super(TransformerBlock, self).__init__()
+        super(Transformer, self).__init__()
         self.att = MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
         self.ffn = Sequential(
             [Dense(ff_dim, activation="relu"), 
@@ -182,7 +186,7 @@ if __name__ == '__main__':
     inputs = Input(shape=(x_length,))
     embedding_layer = TokenAndPositionEmbedding(x_length, 10000, embed_dim)
     x = embedding_layer(inputs)
-    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
+    transformer_block = Transformer(embed_dim, num_heads, ff_dim)
     x = transformer_block(x)
     x = GlobalAveragePooling1D()(x)
     x = Dropout(0.2)(x)
