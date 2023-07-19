@@ -30,6 +30,8 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
+from Transformer import TokenAndPositionEmbedding, TransformerBlock
+
 
 
 parser = argparse.ArgumentParser()
@@ -85,41 +87,6 @@ def sample_xy_pairs(xs, ys, number_buggy):
             sampled_ys.append(y)
     return sampled_xs, sampled_ys
 
-#TransformerBlock
-class TransformerBlock(Layer):
-    def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
-        super(TransformerBlock, self).__init__()
-        self.att = MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
-        self.ffn = Sequential(
-            [Dense(ff_dim, activation="relu"), 
-             Dense(embed_dim),]
-        )
-        self.layernorm1 = LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = LayerNormalization(epsilon=1e-6)
-        self.dropout1 = Dropout(rate)
-        self.dropout2 = Dropout(rate)
-
-    def call(self, inputs, training):
-        attn_output = self.att(inputs, inputs)
-        attn_output = self.dropout1(attn_output, training=training)
-        out1 = self.layernorm1(inputs + attn_output)
-        ffn_output = self.ffn(out1)
-        ffn_output = self.dropout2(ffn_output, training=training)
-        return self.layernorm2(out1 + ffn_output)
-    
-class TokenAndPositionEmbedding(Layer):
-    def __init__(self, maxlen, vocab_size, embed_dim):
-        super(TokenAndPositionEmbedding, self).__init__()
-        self.token_emb = Embedding(input_dim=vocab_size, output_dim=embed_dim)
-        self.pos_emb = Embedding(input_dim=maxlen, output_dim=embed_dim)
-
-    def call(self, x):
-        maxlen = tf.shape(x)[-1]
-        positions = tf.range(start=0, limit=maxlen, delta=1)
-        positions = self.pos_emb(positions)
-        x = self.token_emb(x)
-        #x = tf.reshape(x, [-1, maxlen, 1])  # Reshape the input tensor
-        return x + positions
 
 if __name__ == '__main__':
     print("BugDetection started with " + str(sys.argv))
@@ -196,20 +163,20 @@ if __name__ == '__main__':
     # https://www.tensorflow.org/tensorboard/hyperparameter_tuning_with_hparams
 
     HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([16, 32, 64, 128, 256, 512]))
-    HP_DROPOUT = hp.HParam('dropout', hp.RealInterval(0.1, 0.2))
-    HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd']))
-    HP_EPOCHS = hp.HParam('epochs', hp.Discrete([10, 20, 30, 40, 50]))
+    HP_DROPOUT = hp.HParam('dropout', hp.RealInterval(0.1, 0.2, 0.3, 0.4, 0.5))
+    #HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd']))
+    #HP_EPOCHS = hp.HParam('epochs', hp.Discrete([10, 20, 30, 40, 50]))
     HP_BATCH_SIZE = hp.HParam('batch_size', hp.Discrete([16, 32, 64, 128]))
-    HP_LEARNING_RATE = hp.HParam('learning_rate', hp.RealInterval(0.0001, 0.001))
-    HP_EMBEDDING_DIM = hp.HParam('embedding_dim', hp.Discrete([16, 32, 64, 128]))
+    #HP_LEARNING_RATE = hp.HParam('learning_rate', hp.RealInterval(0.0001, 0.001))
+    HP_EMBEDDING_DIM = hp.HParam('embedding_dim', hp.Discrete([16, 32, 64, 128, 256, 512, 1024]))
     HP_NUM_HEADS = hp.HParam('num_heads', hp.Discrete([4, 8, 16, 32]))
-    HP_FF_DIM = hp.HParam('ff_dim', hp.Discrete([16, 32, 64, 128]))
+    HP_FF_DIM = hp.HParam('ff_dim', hp.Discrete([16, 32, 64, 128, 256, 512]))
 
     METRIC_ACCURACY = 'accuracy'
 
     with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
         hp.hparams_config(
-            hparams=[HP_NUM_UNITS, HP_DROPOUT, HP_OPTIMIZER, HP_EPOCHS, HP_BATCH_SIZE, HP_LEARNING_RATE, HP_EMBEDDING_DIM, HP_NUM_HEADS, HP_FF_DIM],
+            hparams=[HP_NUM_UNITS, HP_DROPOUT, HP_BATCH_SIZE, HP_EMBEDDING_DIM, HP_NUM_HEADS, HP_FF_DIM],
             metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
   )
     
@@ -223,17 +190,17 @@ if __name__ == '__main__':
         x = Dropout(hparams[HP_DROPOUT])(x)
         x = Dense(hparams[HP_NUM_UNITS], activation="relu", kernel_initializer='normal')(x)
         x = Dropout(hparams[HP_DROPOUT])(x)
-        outputs = Dense(1, activation="sigmoid", kernel_initializer='normal')(x)
+        outputs = Dense(3, activation="softmax", kernel_initializer='normal')(x)
 
         model = Model(inputs=inputs, outputs=outputs)
 
         model.compile(
             loss='binary_crossentropy',
-            optimizer=hparams[HP_OPTIMIZER],
+            optimizer='adam',
             metrics=['accuracy']
         )
 
-        model.fit(xs_training_padded_sequences, ys_training, epochs=hparams[HP_EPOCHS]) # Run with 1 epoch to speed things up for demo purposes
+        model.fit(xs_training_padded_sequences, ys_training, epochs=10) # Run with 1 epoch to speed things up for demo purposes
         _, accuracy = model.evaluate(xs_validation_padded_sequences, ys_validation)
         return accuracy
     
@@ -247,8 +214,6 @@ if __name__ == '__main__':
 
     for num_units in HP_NUM_UNITS.domain.values:
         for dropout_rate in (HP_DROPOUT.domain.min_value, HP_DROPOUT.domain.max_value):
-            for optimizer in HP_OPTIMIZER.domain.values:
-                for epochs in HP_EPOCHS.domain.values:
                     for batch_size in HP_BATCH_SIZE.domain.values:
                             for embedding_dim in HP_EMBEDDING_DIM.domain.values:
                                 for num_heads in HP_NUM_HEADS.domain.values:
@@ -256,8 +221,6 @@ if __name__ == '__main__':
                                         hparams = {
                                             HP_NUM_UNITS: num_units,
                                             HP_DROPOUT: dropout_rate,
-                                            HP_OPTIMIZER: optimizer,
-                                            HP_EPOCHS: epochs,
                                             HP_BATCH_SIZE: batch_size,
                                             HP_EMBEDDING_DIM: embedding_dim,
                                             HP_NUM_HEADS: num_heads,
