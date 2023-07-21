@@ -34,8 +34,8 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
-import python.Transformer as Transformer
 import TokenAndPositionEmbedding
+from Transformer import TransformerBlock, TokenAndPositionEmbedding
 
 
 
@@ -93,43 +93,6 @@ def sample_xy_pairs(xs, ys, number_buggy):
             sampled_ys.append(y)
     return sampled_xs, sampled_ys
 
-#TransformerBlock
-class Transformer(Layer):
-    def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
-        super(Transformer, self).__init__()
-        self.att = MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
-        self.ffn = Sequential(
-            [Dense(ff_dim, activation="relu"), 
-             Dense(embed_dim),]
-        )
-        self.layernorm1 = LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = LayerNormalization(epsilon=1e-6)
-        self.dropout1 = Dropout(rate)
-        self.dropout2 = Dropout(rate)
-
-    def call(self, inputs, training):
-        attn_output = self.att(inputs, inputs)
-        attn_output = self.dropout1(attn_output, training=training)
-        out1 = self.layernorm1(inputs + attn_output)
-        ffn_output = self.ffn(out1)
-        ffn_output = self.dropout2(ffn_output, training=training)
-        return self.layernorm2(out1 + ffn_output)
-    
-class TokenAndPositionEmbedding(Layer):
-    def __init__(self, maxlen, vocab_size, embed_dim):
-        super(TokenAndPositionEmbedding, self).__init__()
-        self.token_emb = Embedding(input_dim=vocab_size, output_dim=embed_dim)
-        self.pos_emb = Embedding(input_dim=maxlen, output_dim=embed_dim)
-
-    def call(self, x):
-        maxlen = tf.shape(x)[-1]
-        positions = tf.range(start=0, limit=maxlen, delta=1)
-        positions = self.pos_emb(positions)
-        x = self.token_emb(x)
-        #x = tf.reshape(x, [-1, maxlen, 1])  # Reshape the input tensor
-        return x + positions
-
-
 if __name__ == '__main__':
     print("BugDetection started with " + str(sys.argv))
     time_start = time.time()
@@ -177,6 +140,15 @@ if __name__ == '__main__':
     print("Training examples   : " + str(len(xs_training)))
     print(learning_data.stats)
 
+    # prepare validation data
+    print("Preparing xy pairs for validation data:")
+    learning_data.resetStats()
+    xs_validation, ys_validation, code_pieces_validation = prepare_xy_pairs(
+        True, validation_data_paths, learning_data)
+    print("Validation examples : " + str(len(xs_validation)))
+    print(learning_data.stats)
+
+
 
     # create a model (simple feedforward network)
     embed_dim = 64  # Embedding size for each token
@@ -186,7 +158,7 @@ if __name__ == '__main__':
     inputs = Input(shape=(x_length,))
     embedding_layer = TokenAndPositionEmbedding(x_length, 10000, embed_dim)
     x = embedding_layer(inputs)
-    transformer_block = Transformer(embed_dim, num_heads, ff_dim)
+    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
     x = transformer_block(x)
     x = GlobalAveragePooling1D()(x)
     x = Dropout(0.2)(x)
@@ -213,8 +185,9 @@ if __name__ == '__main__':
                   optimizer=optimizer, metrics=['accuracy'])
     
     history = model.fit(xs_training, ys_training, 
-                        batch_size=32, epochs=20, 
-                    )
+                        batch_size=64, epochs=10, 
+                        validation_data = (xs_validation, ys_validation),
+    )
 
     model.save_weights("predict_class.h5")
 
@@ -226,13 +199,6 @@ if __name__ == '__main__':
     print("Time for learning (seconds): " +
           str(round(time_learning_done - time_start)))
 
-    # prepare validation data
-    print("Preparing xy pairs for validation data:")
-    learning_data.resetStats()
-    xs_validation, ys_validation, code_pieces_validation = prepare_xy_pairs(
-        True, validation_data_paths, learning_data)
-    print("Validation examples : " + str(len(xs_validation)))
-    print(learning_data.stats)
 
     # validate the model
     validation_loss = model.evaluate(xs_validation, ys_validation)

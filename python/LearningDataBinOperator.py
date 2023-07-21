@@ -177,16 +177,9 @@ class LearningData(object):
         if not (right in name_to_vector):
             return
 
-        left_vector = name_to_vector[left]
-        right_vector = name_to_vector[right]
         operator_vector = [0] * operator_embedding_size
         operator_vector[self.all_operators.index(operator)] = 1
-        left_type_vector = type_to_vector.get(
-            left_type, [0]*type_embedding_size)
-        right_type_vector = type_to_vector.get(
-            right_type, [0]*type_embedding_size)
-        parent_vector = node_type_to_vector[parent]
-        grand_parent_vector = node_type_to_vector[grand_parent]
+
 
         # for all xy-pairs: y value = probability that incorrect
         x_correct = left + " " + right + " " + operator + " " + \
@@ -222,7 +215,7 @@ class LearningData(object):
             ys.append(y_incorrect)
             code_pieces.append(CodePiece(left, right, other_operator, src))
 
-    def code_to_xy_str_categorical(self, gen_negatives, bin_op, xs, ys, name_to_vector, type_to_vector, node_type_to_vector, code_pieces):
+    def code_to_xy_pairs_str(self, gen_negatives, bin_op, xs, ys, name_to_vector, classification, code_pieces):
         left = bin_op["left"]
         right = bin_op["right"]
         operator = bin_op["op"]
@@ -236,21 +229,14 @@ class LearningData(object):
         if not (right in name_to_vector):
             return
 
-        left_vector = name_to_vector[left]
-        right_vector = name_to_vector[right]
-        operator_vector = [0] * operator_embedding_size
-        operator_vector[self.all_operators.index(operator)] = 1
-        left_type_vector = type_to_vector.get(
-            left_type, [0]*type_embedding_size)
-        right_type_vector = type_to_vector.get(
-            right_type, [0]*type_embedding_size)
-        parent_vector = node_type_to_vector[parent]
-        grand_parent_vector = node_type_to_vector[grand_parent]
-
         # for all xy-pairs: y value = probability that incorrect
-        x_correct = left + " " + right + " " + operator + " " + \
-                    left_type + " " + right_type + " " + parent + " " + grand_parent
-
+        x_correct = (left or "na") + " " + \
+                    (right or "na") + " " + \
+                    (operator or "na") + " " + \
+                    (left_type or "na") + " " + \
+                    (right_type or "na") + " " + \
+                    (parent or "na") + " " + \
+                    (grand_parent or "na")
         y_correct = [0]
         xs.append(x_correct)
         ys.append(y_correct)
@@ -263,20 +249,24 @@ class LearningData(object):
 
         # generate negatives: pick some other, likely incorrect operator
         if gen_negatives:
-            other_operator = None
-            other_operator_vector = None
-
-            while other_operator_vector == None:
+            #get other operator
+            other_operator = random.choice(self.all_operators)
+            while other_operator == operator:
                 other_operator = random.choice(self.all_operators)
-                if other_operator != operator:
-                    other_operator_vector = [0] * operator_embedding_size
-                    other_operator_vector[self.all_operators.index(
-                        other_operator)] = 1
 
-            x_incorrect = left + " " + right + " " + other_operator + " " + \
-                            left_type + " " + right_type + " " + parent + " " + grand_parent
 
-            y_incorrect = [3]
+            x_incorrect = (left or "na") + " " + \
+                        (right or "na") + " " + \
+                        (other_operator or "na") + " " + \
+                        (left_type or "na") + " " + \
+                        (right_type or "na") + " " + \
+                        (parent or "na") + " " + \
+                        (grand_parent or "na")
+
+            if classification == "binary":
+                y_incorrect = [1]
+            elif classification == "multiple":
+                y_incorrect = [3]
             xs.append(x_incorrect)
             ys.append(y_incorrect)
             code_pieces.append(CodePiece(left, right, other_operator, src))

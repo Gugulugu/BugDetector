@@ -19,6 +19,7 @@ import warnings
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorboard.plugins.hparams import api as hp
 
 
 import time
@@ -139,15 +140,15 @@ if __name__ == '__main__':
     print(xs_training[0:10])
 
     #preprocess data
-    #xs_training = [PreprocessingData.preprocess_text(x) for x in xs_training]
+    xs_training = [PreprocessingData.preprocess_text(x) for x in xs_training]
     #xs_training = [PreprocessingData.symbols_to_text(x) for x in xs_training]
-    #xs_validation = [PreprocessingData.preprocess_text(x) for x in xs_validation]
+    xs_validation = [PreprocessingData.preprocess_text(x) for x in xs_validation]
     #xs_validation = [PreprocessingData.symbols_to_text(x) for x in xs_validation]
     print(xs_training[0:10])
 
 
 
-    tokenizer = Tokenizer(oov_token = 'unknown',filters = ':', lower = True)
+    tokenizer = Tokenizer(oov_token = 'unknown',filters = '', lower = False)
     tokenizer.fit_on_texts(xs_training)
     tokenizer.fit_on_texts(xs_validation)
     sequences_train = tokenizer.texts_to_sequences(xs_training)
@@ -161,137 +162,86 @@ if __name__ == '__main__':
     # Pad sequences to ensure equal length validation
     #max_len_val = max(len(seq) for seq in sequences_val)
     xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len_train, padding='post')
+    
     print(xs_training_padded_sequences[0:10])
     print(xs_validation_padded_sequences.shape)
 
-    # create a model (simple feedforward network)
-    embed_dim = 16  # Embedding size for each token
-    num_heads = 4  # Number of attention heads
-    ff_dim = 16  # Hidden layer size in feed forward network inside transformer
 
-    inputs = Input(shape=(max_len_train,))
-    embedding_layer = TokenAndPositionEmbedding(max_len_train, vocab_size, embed_dim)
-    x = embedding_layer(inputs)
-    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
-    x = transformer_block(x)
-    x = GlobalAveragePooling1D()(x)
-    x = Dropout(0.2)(x)
-    x = Dense(200, activation="relu", kernel_initializer="normal")(x)
-    x = Dropout(0.2)(x)
-    outputs = Dense(1, activation="sigmoid",kernel_initializer="normal")(x)
+    # Hyperparameter tuning
+    # https://www.tensorflow.org/tensorboard/hyperparameter_tuning_with_hparams
 
-    model = Model(inputs=inputs, outputs=outputs)
+    #HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([200, 512]))
+    #HP_DROPOUT = hp.HParam('dropout', hp.RealInterval(0.2))
+    #HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd']))
+    #HP_EPOCHS = hp.HParam('epochs', hp.Discrete([10, 20, 30, 40, 50]))
+    #HP_BATCH_SIZE = hp.HParam('batch_size', hp.Discrete([64, 128]))
+    #HP_LEARNING_RATE = hp.HParam('learning_rate', hp.RealInterval(0.0001, 0.001))
+    HP_EMBEDDING_DIM = hp.HParam('embedding_dim', hp.Discrete([4, 256, 512])) #16, 32, 64, 128, 256, 512, 1024 (256 -32 missing)
+    HP_NUM_HEADS = hp.HParam('num_heads', hp.Discrete([2, 16, 32])) #4, 8, 16,
+    HP_FF_DIM = hp.HParam('ff_dim', hp.Discrete([4, 256, 512])) #32, 64, 
 
+    METRIC_ACCURACY = 'accuracy'
 
-    # summarize the model
-    print(model.summary())
-
-    initial_learning_rate = 0.001
-    lr_schedule = keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate, decay_steps=1600, decay_rate=0.96, staircase=True
-    )
-
-    optimizer = keras.optimizers.Adam(learning_rate=lr_schedule)
-
-
-    #model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-    model.compile(loss='binary_crossentropy',
-                  optimizer=optimizer, metrics=['accuracy'])
     
-    history = model.fit(xs_training_padded_sequences, ys_training, 
-                        batch_size=64, epochs=10, validation_data = (xs_validation_padded_sequences, ys_validation) 
-                    )
 
-    model.save_weights("predict_class.h5")
+    with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
+        hp.hparams_config(
+            hparams=[HP_EMBEDDING_DIM, HP_NUM_HEADS, HP_FF_DIM],
+            metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
+        
+  )
+    
+    
+    def train_test_model(hparams):
+        inputs = Input(shape=(max_len_train,))
+        embedding_layer = TokenAndPositionEmbedding(max_len_train, vocab_size, hparams[HP_EMBEDDING_DIM])
+        x = embedding_layer(inputs)
+        transformer_block = TransformerBlock(hparams[HP_EMBEDDING_DIM], hparams[HP_NUM_HEADS], hparams[HP_FF_DIM])
+        x = transformer_block(x)
+        x = GlobalAveragePooling1D()(x)
+        x = Dropout(0.2)(x)
+        x = Dense(200, activation="relu", kernel_initializer='normal')(x)
+        x = Dropout(0.2)(x)
+        outputs = Dense(1, activation="sigmoid", kernel_initializer='normal')(x)
 
+        model = Model(inputs=inputs, outputs=outputs)
 
-    time_stamp = math.floor(time.time() * 1000)
-    model.save("bug_detection_model_"+str(time_stamp))
+        model.compile(
+            loss='binary_crossentropy',
+            optimizer='adam',
+            metrics=['accuracy']
+        )
 
-    time_learning_done = time.time()
-    print("Time for learning (seconds): " +
-          str(round(time_learning_done - time_start)))
+        #early_stopping = EarlyStopping(monitor='loss', patience=2, verbose=1, mode='auto', min_delta=0.01)
 
+        model.fit(xs_training_padded_sequences, ys_training, epochs=10, batch_size = 64) #callbacks=[early_stopping]# Run with 1 epoch to speed things up for demo purposes
+        _, accuracy = model.evaluate(xs_validation_padded_sequences, ys_validation)
+        return accuracy
+    
+    def run(run_dir, hparams):
+        with tf.summary.create_file_writer(run_dir).as_default():
+            hp.hparams(hparams)  # record the values used in this trial
+            accuracy = train_test_model(hparams)
+            tf.summary.scalar(METRIC_ACCURACY, accuracy, step=1)
+    
+    session_num = 0 #110
 
-    # validate the model
-    validation_loss = model.evaluate(xs_validation_padded_sequences, ys_validation)
-    print()
-    print("Validation loss & accuracy: " + str(validation_loss))
-
-    # compute precision and recall with different thresholds
-    #  for reporting anomalies
-    # assumption: correct and incorrect arguments are alternating
-    #  in list of x-y pairs
-    threshold_to_correct = Counter()
-    threshold_to_incorrect = Counter()
-    threshold_to_found_seeded_bugs = Counter()
-    threshold_to_warnings_in_orig_code = Counter()
-    ys_prediction = model.predict(xs_validation_padded_sequences)
-    poss_anomalies = []
-    for idx in range(0, len(xs_validation_padded_sequences), 2):
-        # probab(original code should be changed), expect 0
-        y_prediction_orig = ys_prediction[idx][0]
-        # probab(changed code should be changed), expect 1
-        y_prediction_changed = ys_prediction[idx + 1][0]
-        # higher means more likely to be anomaly in current code
-        anomaly_score = learning_data.anomaly_score(
-            y_prediction_orig, y_prediction_changed)
-        # higher means more likely to be correct in current code
-        normal_score = learning_data.normal_score(
-            y_prediction_orig, y_prediction_changed)
-        is_anomaly = False
-        for threshold_raw in range(1, 20, 1):
-            threshold = threshold_raw / 20.0
-            suggests_change_of_orig = anomaly_score >= threshold
-            suggests_change_of_changed = normal_score >= threshold
-            # counts for positive example
-            if suggests_change_of_orig:
-                threshold_to_incorrect[threshold] += 1
-                threshold_to_warnings_in_orig_code[threshold] += 1
-            else:
-                threshold_to_correct[threshold] += 1
-            # counts for negative example
-            if suggests_change_of_changed:
-                threshold_to_correct[threshold] += 1
-                threshold_to_found_seeded_bugs[threshold] += 1
-            else:
-                threshold_to_incorrect[threshold] += 1
-
-            # check if we found an anomaly in the original code
-            if suggests_change_of_orig:
-                is_anomaly = True
-
-        if is_anomaly:
-            code_piece = code_pieces_validation[idx]
-            message = "Score : " + \
-                str(anomaly_score) + " | " + code_piece.to_message()
-#             print("Possible anomaly: "+message)
-            # Log the possible anomaly for future manual inspection
-            poss_anomalies.append(Anomaly(message, anomaly_score))
-
-    f_inspect = open('poss_anomalies.txt', 'w+')
-    poss_anomalies = sorted(poss_anomalies, key=lambda a: -a.score)
-    for anomaly in poss_anomalies:
-        f_inspect.write(anomaly.message + "\n")
-    print("Possible Anomalies written to file : poss_anomalies.txt")
-    f_inspect.close()
-
-    time_prediction_done = time.time()
-    print("Time for prediction (seconds): " +
-          str(round(time_prediction_done - time_learning_done)))
-
-    print()
-    for threshold_raw in range(1, 20, 1):
-        threshold = threshold_raw / 20.0
-        recall = (
-            threshold_to_found_seeded_bugs[threshold] * 1.0) / (len(xs_validation_padded_sequences) / 2)
-        precision = 1 - \
-            ((threshold_to_warnings_in_orig_code[threshold]
-              * 1.0) / (len(xs_validation_padded_sequences) / 2))
-        if threshold_to_correct[threshold] + threshold_to_incorrect[threshold] > 0:
-            accuracy = threshold_to_correct[threshold] * 1.0 / (
-                threshold_to_correct[threshold] + threshold_to_incorrect[threshold])
-        else:
-            accuracy = 0.0
-        print("Threshold: " + str(threshold) + "   Accuracy: " + str(round(accuracy, 4)) + "   Recall: " + str(round(recall, 4)
-                                                                                                               ) + "   Precision: " + str(round(precision, 4))+"  #Warnings: "+str(threshold_to_warnings_in_orig_code[threshold]))
+    #for num_units in HP_NUM_UNITS.domain.values:
+        #for dropout_rate in (HP_DROPOUT.domain.min_value, HP_DROPOUT.domain.max_value):
+                    #for batch_size in HP_BATCH_SIZE.domain.values:
+    for embedding_dim in HP_EMBEDDING_DIM.domain.values:
+                                for num_heads in HP_NUM_HEADS.domain.values:
+                                    for ff_dim in HP_FF_DIM.domain.values:
+                                        hparams = {
+                                            #HP_NUM_UNITS: num_units,
+                                            #HP_DROPOUT: dropout_rate,
+                                            #HP_BATCH_SIZE: batch_size,
+                                            HP_EMBEDDING_DIM: embedding_dim,
+                                            HP_NUM_HEADS: num_heads,
+                                            HP_FF_DIM: ff_dim
+                                        }
+                                        run_name = "run-%d" % session_num
+                                        print('--- Starting trial: %s' % run_name)
+                                        print({h.name: hparams[h] for h in hparams})
+                                        run('logs/hparam_tuning_swapArgs/' + run_name, hparams)
+                                        session_num += 1

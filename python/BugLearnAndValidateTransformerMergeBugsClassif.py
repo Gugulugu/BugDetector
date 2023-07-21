@@ -40,6 +40,8 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
+from Preprocessing import PreprocessingData
+
 
 
 parser = argparse.ArgumentParser()
@@ -73,8 +75,8 @@ def prepare_xy_pairs(gen_negatives, data_paths, learning_data):
     code_pieces = []
 
     for code_piece in Util.DataReader(data_paths):
-        learning_data.code_to_xy_str_categorical(gen_negatives, code_piece, xs, ys,
-                                       name_to_vector, type_to_vector, node_type_to_vector, code_pieces)
+        learning_data.code_to_xy_pairs_str(gen_negatives, code_piece, xs, ys,
+                                       name_to_vector, "multiple", code_pieces)
     x_length = len(xs[0])
 
     print("Stats: " + str(learning_data.stats))
@@ -226,7 +228,12 @@ if __name__ == '__main__':
     all_ys_validation = np.array(all_ys_validation)
     all_xs_validation = np.array(all_xs_validation)
 
-
+    #preprocess data
+    #all_xs_training = [PreprocessingData.preprocess_text(x) for x in all_xs_training]
+    all_xs_training = [PreprocessingData.symbols_to_text(x) for x in all_xs_training]
+    #all_xs_validation = [PreprocessingData.preprocess_text(x) for x in all_xs_validation]
+    all_xs_validation = [PreprocessingData.symbols_to_text(x) for x in all_xs_validation]
+    print(xs_training[0:10])
 
     # Tokenize the data training/validation
     tokenizer = Tokenizer(oov_token = 'unknown',filters = '', lower = False)
@@ -237,21 +244,29 @@ if __name__ == '__main__':
 
     # Pad sequences to ensure equal length training
     max_len = max(len(seq) for seq in sequences_train)
-    xs_training_padded_sequences = pad_sequences(sequences_train, maxlen=max_len)
+    xs_training_padded_sequences = pad_sequences(sequences_train, maxlen=max_len, padding='post')
     vocab_size = len(tokenizer.word_index) + 1
 
     # Pad sequences to ensure equal length validation
     #max_len_val = max(len(seq) for seq in sequences_val)
-    xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len)
-    
-    print(xs_validation_padded_sequences)
+    xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len, padding='post')
+
+    # Accessing the word_index dictionary
+    vocab = tokenizer.word_index
+
+    # Printing the vocabulary
+    for word, index in vocab.items():
+        print(f"Word: '{word}', Index: {index}")
+        
+    print(xs_training_padded_sequences[0:10])
+    classes = len(np.unique(all_ys_training))
 
 
 
     # create a model (simple feedforward network)
-    embed_dim = 256  # Embedding size for each token
-    num_heads = 12  # Number of attention heads
-    ff_dim = 128  # Hidden layer size in feed forward network inside transformer
+    embed_dim = 64  # Embedding size for each token
+    num_heads = 8  # Number of attention heads
+    ff_dim = 32  # Hidden layer size in feed forward network inside transformer
 
     inputs = Input(shape=(max_len,))
     embedding_layer = TokenAndPositionEmbedding(max_len, vocab_size, embed_dim)
@@ -262,7 +277,7 @@ if __name__ == '__main__':
     x = Dropout(0.2)(x)
     x = Dense(200, activation="relu", kernel_initializer='normal')(x)
     x = Dropout(0.2)(x)
-    outputs = Dense(4, activation="softmax", kernel_initializer='normal')(x)
+    outputs = Dense(classes, activation="softmax", kernel_initializer='normal')(x)
 
     model = Model(inputs=inputs, outputs=outputs)
 
@@ -275,7 +290,7 @@ if __name__ == '__main__':
                   optimizer='adam', metrics=['accuracy'])
     
     history = model.fit(xs_training_padded_sequences, all_ys_training, 
-                        batch_size=64, epochs=15, 
+                        batch_size=64, epochs=10, 
                     )
 
     model.save_weights("predict_class.h5")

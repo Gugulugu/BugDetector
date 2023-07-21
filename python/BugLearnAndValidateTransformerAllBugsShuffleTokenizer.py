@@ -73,8 +73,8 @@ def prepare_xy_pairs(gen_negatives, data_paths, learning_data):
     code_pieces = []
 
     for code_piece in Util.DataReader(data_paths):
-        learning_data.code_to_xy_str(gen_negatives, code_piece, xs, ys,
-                                       name_to_vector, type_to_vector, node_type_to_vector, code_pieces)
+        learning_data.code_to_xy_pairs_str(gen_negatives, code_piece, xs, ys,
+                                       name_to_vector, "binary", code_pieces)
     x_length = len(xs[0])
 
     print("Stats: " + str(learning_data.stats))

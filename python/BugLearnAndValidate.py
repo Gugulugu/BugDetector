@@ -149,9 +149,9 @@ if __name__ == '__main__':
 
     # train model
     model.compile(loss='binary_crossentropy',
-                  optimizer='rmsprop', metrics=['accuracy'])
+                  optimizer='adam', metrics=['accuracy'])
     history = model.fit(xs_training, ys_training,
-                        batch_size=64, epochs=15, verbose=1)
+                        batch_size=64, epochs=10, verbose=1)
 
     time_stamp = math.floor(time.time() * 1000)
     model.save("bug_detection_model_"+str(time_stamp))

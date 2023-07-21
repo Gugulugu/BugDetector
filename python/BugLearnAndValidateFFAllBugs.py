@@ -1,9 +1,3 @@
-"""
-Created on Jun 23, 2017
-
-@author: Michael Pradel, Sabine Zach
-"""
-
 import sys
 import json
 from os.path import join
