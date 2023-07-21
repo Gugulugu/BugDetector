@@ -243,5 +243,5 @@ if __name__ == '__main__':
                                         run_name = "run-%d" % session_num
                                         print('--- Starting trial: %s' % run_name)
                                         print({h.name: hparams[h] for h in hparams})
-                                        run('logs/hparam_tuning_swapArgs/' + run_name, hparams)
+                                        run('logs/hparam_tuning_swapArgs2/' + run_name, hparams)
                                         session_num += 1

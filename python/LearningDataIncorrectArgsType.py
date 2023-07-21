@@ -136,7 +136,7 @@ class LearningData(object):
                         CodePiece(callee_string, argument_strings, call["src"]))
 
                     
-    def code_to_xy_str(self, gen_negatives, call, xs, ys, name_to_vector, type_to_vector, node_type_to_vector, calls=None):
+    def code_to_xy_pairs_str(self, gen_negatives, call, xs, ys, name_to_vector, type_to_vector, classification, calls=None):
         arguments = call["arguments"]
         self.stats["calls"] += 1
         if len(arguments) != 2:
@@ -152,31 +152,19 @@ class LearningData(object):
             if not (argument_string in name_to_vector):
                 return
         self.stats["calls_with_known_names"] += 1
-        callee_vector = name_to_vector[callee_string]
-        argument0_vector = name_to_vector[argument_strings[0]]
-        argument1_vector = name_to_vector[argument_strings[1]]
 
         # optional information: base object, argument types, etc.
         base_string = call["base"]
-        base_vector = name_to_vector.get(base_string, [0]*name_embedding_size)
         if base_string in name_to_vector:
             self.stats["calls_with_known_base_object"] += 1
 
         argument_type_strings = call["argumentTypes"]
-        argument0_type_vector = type_to_vector.get(
-            argument_type_strings[0], [0]*type_embedding_size)
-        argument1_type_vector = type_to_vector.get(
-            argument_type_strings[1], [0]*type_embedding_size)
         if (self.is_known_type(argument_type_strings[0]) or self.is_known_type(argument_type_strings[1])):
             self.stats["calls_with_known_types"] += 1
         if (self.is_known_type(argument_type_strings[0]) and self.is_known_type(argument_type_strings[1])):
             self.stats["calls_with_both_known_types"] += 1
 
         parameter_strings = call["parameters"]
-        parameter0_vector = name_to_vector.get(
-            parameter_strings[0], [0]*name_embedding_size)
-        parameter1_vector = name_to_vector.get(
-            parameter_strings[1], [0]*name_embedding_size)
         if (parameter_strings[0] in name_to_vector or parameter_strings[1] in name_to_vector):
             self.stats["calls_with_known_parameters"] += 1
 
@@ -191,12 +179,13 @@ class LearningData(object):
             calls.append(
                 CodePiece(callee_string, argument_strings, call["src"]))
 
+        types = ["unknown", "undefined", "string", "regex", "object", "number", "null", "boolean"]
         # generate negatives
         if gen_negatives:
             # generate negatives for incorrect argument types
-            incorrect_types = random.sample(list(type_to_vector.keys()), 2)
+            incorrect_types = random.sample(types, 2)
             while incorrect_types[0] == argument_type_strings[0] or incorrect_types[1] == argument_type_strings[1]:
-                incorrect_types = random.sample(list(type_to_vector.keys()), 2)
+                incorrect_types = random.sample(types, 2)
 
             x_incorrect_types = callee_string + " " + argument_strings[0] + " " + argument_strings[1]
             x_incorrect_types += " " + base_string + " " + incorrect_types[0] + " " + incorrect_types[1]

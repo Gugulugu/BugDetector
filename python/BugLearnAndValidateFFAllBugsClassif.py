@@ -70,7 +70,7 @@ def prepare_xy_pairs(gen_negatives, data_paths, learning_data):
 
     for code_piece in Util.DataReader(data_paths):
         learning_data.code_to_xy_pairs_categorical(gen_negatives, code_piece, xs, ys,
-                                       name_to_vector, type_to_vector, node_type_to_vector, code_pieces)
+                                       name_to_vector,type_to_vector, node_type_to_vector, code_pieces,)
     x_length = len(xs[0])
 
     print("Stats: " + str(learning_data.stats))
@@ -140,14 +140,19 @@ if __name__ == '__main__':
         xs_training, ys_training, _ = prepare_xy_pairs(
             True, training_data_paths_list[i], learning_data_objects[i])
         
-
-        xs_training_padded = tf.pad(xs_training, [[0, 0], [0, 1210 - xs_training.shape[1]]], constant_values=0)  # Pad xs_training with zeros to match [x, 1210] shape
-
-        all_xs_training.append(xs_training_padded)  # Append padded tensors to the list
+        all_xs_training.append(xs_training)  # Append padded tensors to the list
         all_ys_training.append(ys_training)  # Append padded tensors to the list
 
         print("Training examples   : " + str(len(xs_training)))
         print(learning_data_objects[i].stats)
+
+    max_length = max([tensor.shape[1] for tensor in all_xs_training])
+    for i in range(len(all_xs_training)):
+        all_xs_training[i] = tf.pad(
+            all_xs_training[i],
+            [[0, 0], [0, max_length - all_xs_training[i].shape[1]]],
+            constant_values=0,
+        )
 
     # combine all training data to one tensor and shuffle
     combined_xs_training = tf.concat(all_xs_training, axis=0)
@@ -168,7 +173,6 @@ if __name__ == '__main__':
     model.add(Dense(200, input_dim=x_length,
                     activation="relu", kernel_initializer='normal'))
     model.add(Dropout(0.2))
-    model.add(Flatten())
     #model.add(Dense(200, activation="relu"))
     model.add(Dense(4, activation="softmax", kernel_initializer='normal'))
 
@@ -181,7 +185,7 @@ if __name__ == '__main__':
                   optimizer='adam', metrics=['accuracy'])
     
     history = model.fit(shuffled_xs_training, shuffled_ys_training, 
-                        batch_size=64, epochs=15, 
+                        batch_size=64, epochs=10, 
                     )
     
     
@@ -200,6 +204,10 @@ if __name__ == '__main__':
     del combined_ys_training
     del shuffled_xs_training
     del shuffled_ys_training
+    del xs_training
+    del ys_training
+    del all_xs_training
+    del all_ys_training
     gc.collect()
 
     # prepare validation data

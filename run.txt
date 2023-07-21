@@ -38,3 +38,8 @@ python3 python/BugLearnAndValidate.py --pattern IncorrectArgsType --token_emb to
 
 python3 python/BugLearnAndValidateTransformerSelfEmb.py --pattern SwappedArgs --token_emb token_to_vector.json --training_data calls_training/calls_*.json --validation_data calls_eval/calls_*.json
 python3 python/BugLearnAndValidateTransformerSelfEmb.py --pattern BinOperator --token_emb token_to_vector.json --training_data binops_training/binOps_*.json --validation_data binops_eval/binOps_*.json
+python3 python/BugLearnAndValidateTransformerSelfEmb.py --pattern IncorrectBinaryOperand --token_emb token_to_vector.json --training_data binops_training/binOps_*.json --validation_data binops_eval/binOps_*.json
+python3 python/BugLearnAndValidateTransformerSelfEmb.py --pattern IncorrectArgsType --token_emb token_to_vector.json --training_data calls_training/calls_*.json --validation_data calls_eval/calls_*.json
+
+
+python3 python/TransformerSelfEmbHyperParaTuningSingle.py --pattern SwappedArgs --token_emb token_to_vector.json --training_data calls_training/calls_*.json --validation_data calls_eval/calls_*.json

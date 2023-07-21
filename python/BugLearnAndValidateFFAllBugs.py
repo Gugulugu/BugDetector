@@ -180,7 +180,6 @@ if __name__ == "__main__":
         xs_training, ys_training, _ = prepare_xy_pairs(
             True, training_data_paths_list[i], learning_data_objects[i]
         )
-
         all_xs_training.append(xs_training)  # Append padded tensors to the list
         all_ys_training.append(ys_training)  # Append padded tensors to the list
 

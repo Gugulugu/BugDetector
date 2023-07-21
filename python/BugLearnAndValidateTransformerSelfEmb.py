@@ -165,8 +165,8 @@ if __name__ == '__main__':
     print(xs_validation_padded_sequences.shape)
 
     # create a model (simple feedforward network)
-    embed_dim = 16  # Embedding size for each token
-    num_heads = 4  # Number of attention heads
+    embed_dim = 64  # Embedding size for each token
+    num_heads = 8  # Number of attention heads
     ff_dim = 16  # Hidden layer size in feed forward network inside transformer
 
     inputs = Input(shape=(max_len_train,))
@@ -196,7 +196,7 @@ if __name__ == '__main__':
 
     #model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     model.compile(loss='binary_crossentropy',
-                  optimizer=optimizer, metrics=['accuracy'])
+                  optimizer=optimizer, metrics=['accuracy', 'Precision', 'Recall'])
     
     history = model.fit(xs_training_padded_sequences, ys_training, 
                         batch_size=64, epochs=10, validation_data = (xs_validation_padded_sequences, ys_validation) 

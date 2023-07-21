@@ -59,8 +59,8 @@ class PreprocessingData:
     @staticmethod
     def preprocess_text(text):
         # Insert spaces before and after special characters
-        text = re.sub('(ID:)', 'ID: ', text)
-        text = re.sub('(LIT:)', 'LIT: ', text)
+        #text = re.sub('(ID:)', 'ID ', text)
+        #text = re.sub('(LIT:)', 'LIT ', text)
         text = re.sub('(na)', '', text)
 
         #results of logs/hparam_tuning_test_split/

@@ -132,6 +132,15 @@ if __name__ == '__main__':
     print(learning_data.stats)
     print(xs_training[0:10])
 
+    # prepare validation data
+    print("Preparing xy pairs for validation data:")
+    learning_data.resetStats()
+    xs_validation, ys_validation, code_pieces_validation = prepare_xy_pairs(
+        True, validation_data_paths, learning_data)
+    print("Validation examples : " + str(len(xs_validation)))
+    print(learning_data.stats)
+
+
     #xs_training, ys_training = utils.shuffle(xs_training, ys_training)
 
 
@@ -149,9 +158,10 @@ if __name__ == '__main__':
 
     # train model
     model.compile(loss='binary_crossentropy',
-                  optimizer='adam', metrics=['accuracy'])
+                  optimizer='adam', metrics=['accuracy', 'Precision', 'Recall'])
     history = model.fit(xs_training, ys_training,
-                        batch_size=64, epochs=10, verbose=1)
+                        batch_size=64, epochs=10, verbose=1,
+                        validation_data = (xs_validation, ys_validation))
 
     time_stamp = math.floor(time.time() * 1000)
     model.save("bug_detection_model_"+str(time_stamp))
@@ -160,13 +170,6 @@ if __name__ == '__main__':
     print("Time for learning (seconds): " +
           str(round(time_learning_done - time_start)))
 
-    # prepare validation data
-    print("Preparing xy pairs for validation data:")
-    learning_data.resetStats()
-    xs_validation, ys_validation, code_pieces_validation = prepare_xy_pairs(
-        True, validation_data_paths, learning_data)
-    print("Validation examples : " + str(len(xs_validation)))
-    print(learning_data.stats)
 
     #xs_validation, ys_validation = utils.shuffle(xs_validation, ys_validation)
 
