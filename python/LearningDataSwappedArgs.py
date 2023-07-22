@@ -219,8 +219,6 @@ class LearningData(object):
             self.stats["calls_with_both_known_types"] += 1
 
         parameter_strings = call["parameters"]
-        if (parameter_strings[0] in name_to_vector or parameter_strings[1] in name_to_vector):
-            self.stats["calls_with_known_parameters"] += 1
 
         # generate correct
         x_keep = (callee_string or "na") + " " + (argument_strings[0] or "na") + " " + (argument_strings[1] or "na")

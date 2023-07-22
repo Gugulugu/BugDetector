@@ -1,3 +1,9 @@
+'''
+Created on Jun 23, 2017
+
+@author: Michael Pradel, Sabine Zach
+'''
+
 import sys
 import json
 from os.path import join
@@ -5,23 +11,25 @@ from os import getcwd
 from collections import Counter, namedtuple
 import math
 import argparse
+import os
+import gc
 import random
-
+#os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 #from tensorflow.python.keras.models import Sequential
 #from tensorflow.python.keras.layers.core import Dense, Dropout
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.layers import MultiHeadAttention, LayerNormalization, Dropout, Layer
-from tensorflow.keras.layers import Embedding, Input, GlobalAveragePooling1D, Dense
+from tensorflow.keras.layers import Embedding, Input, GlobalAveragePooling1D, Dense, Flatten
 from tensorflow.keras.datasets import imdb
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.callbacks import EarlyStopping
 import numpy as np
 import warnings
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorboard.plugins.hparams import api as hp
+
+
 
 
 import time
@@ -32,7 +40,6 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
-from Transformer import TokenAndPositionEmbedding, TransformerBlock
 from Preprocessing import PreprocessingData
 
 
@@ -40,10 +47,6 @@ from Preprocessing import PreprocessingData
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--token_emb", help="JSON file with token embeddings", required=True)
-parser.add_argument(
-    "--type_emb", help="JSON file with type embeddings", required=True)
-parser.add_argument(
-    "--node_emb", help="JSON file with AST node embeddings", required=True)
 parser.add_argument(
     "--training_data_Swapped", help="JSON files with training data", required=True, nargs="+")
 parser.add_argument(
@@ -97,6 +100,40 @@ def sample_xy_pairs(xs, ys, number_buggy):
     return sampled_xs, sampled_ys
 
 
+#TransformerBlock
+class TransformerBlock(Layer):
+    def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
+        super(TransformerBlock, self).__init__()
+        self.att = MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
+        self.ffn = Sequential(
+            [Dense(ff_dim, activation="relu"), 
+             Dense(embed_dim),]
+        )
+        self.layernorm1 = LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = LayerNormalization(epsilon=1e-6)
+        self.dropout1 = Dropout(rate)
+        self.dropout2 = Dropout(rate)
+
+    def call(self, inputs, training):
+        attn_output = self.att(inputs, inputs)
+        attn_output = self.dropout1(attn_output, training=training)
+        out1 = self.layernorm1(inputs + attn_output)
+        ffn_output = self.ffn(out1)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        return self.layernorm2(out1 + ffn_output)
+    
+class TokenAndPositionEmbedding(Layer):
+    def __init__(self, maxlen, vocab_size, embed_dim):
+        super(TokenAndPositionEmbedding, self).__init__()
+        self.token_emb = Embedding(input_dim=vocab_size, output_dim=embed_dim)
+        self.pos_emb = Embedding(input_dim=maxlen, output_dim=embed_dim)
+
+    def call(self, x):
+        maxlen = tf.shape(x)[-1]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        x = self.token_emb(x)
+        return x + positions
 
 if __name__ == '__main__':
     print("BugDetection started with " + str(sys.argv))
@@ -105,8 +142,6 @@ if __name__ == '__main__':
     validation_data_paths_list = []
     args = parser.parse_args()
     name_to_vector_file = args.token_emb
-    type_to_vector_file = args.type_emb
-    node_type_to_vector_file = args.node_emb
     training_data_paths_list.append(args.training_data_Swapped)
     training_data_paths_list.append(args.training_data_BinOp)
     training_data_paths_list.append(args.training_data_IncBinOp)
@@ -117,10 +152,6 @@ if __name__ == '__main__':
 
     with open(name_to_vector_file) as f:
         name_to_vector = json.load(f)
-    with open(type_to_vector_file) as f:
-        type_to_vector = json.load(f)
-    with open(node_type_to_vector_file) as f:
-        node_type_to_vector = json.load(f)
 
     
     learning_data_objects = []
@@ -155,7 +186,6 @@ if __name__ == '__main__':
         val_lengths.append(len(xs_validation)) # store length of every learning object
         all_xs_training.append(xs_training)  # Append padded tensors to the list
         all_ys_training.append(ys_training)  # Append padded tensors to the list
-        print(xs_training[0:10])
         all_xs_validation.append(xs_validation)  # Append padded tensors to the list
         all_ys_validation.append(ys_validation)  # Append padded tensors to the list
         all_code_pieces_validation.append(code_pieces_validation)  # Append padded tensors to the list
@@ -188,17 +218,15 @@ if __name__ == '__main__':
     all_ys_validation = np.array(all_ys_validation)
     all_xs_validation = np.array(all_xs_validation)
 
-
     #preprocess data
-    all_xs_training = [PreprocessingData.preprocess_text(x) for x in all_xs_training]
-    #all_xs_training = [PreprocessingData.symbols_to_text(x) for x in all_xs_training]
-    all_xs_validation = [PreprocessingData.preprocess_text(x) for x in all_xs_validation]
-    #all_xs_validation = [PreprocessingData.symbols_to_text(x) for x in all_xs_validation]
-    print(all_xs_training[0:10])
+    #all_xs_training = [PreprocessingData.preprocess_text(x) for x in all_xs_training]
+    all_xs_training = [PreprocessingData.symbols_to_text(x) for x in all_xs_training]
+    #all_xs_validation = [PreprocessingData.preprocess_text(x) for x in all_xs_validation]
+    all_xs_validation = [PreprocessingData.symbols_to_text(x) for x in all_xs_validation]
+    print(xs_training[0:10])
 
-    
     # Tokenize the data training/validation
-    tokenizer = Tokenizer(oov_token = False,filters = '', lower = True)
+    tokenizer = Tokenizer(oov_token = 'unknown',filters = '', lower = False)
     tokenizer.fit_on_texts(all_xs_training)
     tokenizer.fit_on_texts(all_xs_validation)
     sequences_train = tokenizer.texts_to_sequences(all_xs_training)
@@ -213,98 +241,64 @@ if __name__ == '__main__':
     #max_len_val = max(len(seq) for seq in sequences_val)
     xs_validation_padded_sequences = pad_sequences(sequences_val, maxlen=max_len, padding='post')
 
+    # Accessing the word_index dictionary
+    vocab = tokenizer.word_index
+
+    # Printing the vocabulary
+    for word, index in vocab.items():
+        print(f"Word: '{word}', Index: {index}")
         
     print(xs_training_padded_sequences[0:10])
     classes = len(np.unique(all_ys_training))
 
 
 
+    # create a model (simple feedforward network)
+    embed_dim = 64  # Embedding size for each token
+    num_heads = 8  # Number of attention heads
+    ff_dim = 32  # Hidden layer size in feed forward network inside transformer
 
-    # Hyperparameter tuning
-    # https://www.tensorflow.org/tensorboard/hyperparameter_tuning_with_hparams
+    inputs = Input(shape=(max_len,))
+    embedding_layer = TokenAndPositionEmbedding(max_len, vocab_size, embed_dim)
+    x = embedding_layer(inputs)
+    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
+    x = transformer_block(x)
+    x = GlobalAveragePooling1D()(x)
+    x = Dropout(0.2)(x)
+    x = Dense(200, activation="relu", kernel_initializer='normal')(x)
+    x = Dropout(0.2)(x)
+    outputs = Dense(classes, activation="softmax", kernel_initializer='normal')(x)
 
-    #HP_NUM_UNITS = hp.HParam('num_units', hp.Discrete([200, 512]))
-    #HP_DROPOUT = hp.HParam('dropout', hp.RealInterval(0.2))
-    #HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd']))
-    #HP_EPOCHS = hp.HParam('epochs', hp.Discrete([10, 20, 30, 40, 50]))
-    #HP_BATCH_SIZE = hp.HParam('batch_size', hp.Discrete([64, 128]))
-    #HP_LEARNING_RATE = hp.HParam('learning_rate', hp.RealInterval(0.0001, 0.001))
-    HP_EMBEDDING_DIM = hp.HParam('embedding_dim', hp.Discrete([32, 256, 512])) #16, 32, 64, 128, 256, 512, 1024 (256 -32 missing)
-    HP_NUM_HEADS = hp.HParam('num_heads', hp.Discrete([8, 16, 32])) #4, 8, 16,
-    HP_FF_DIM = hp.HParam('ff_dim', hp.Discrete([64, 256, 512])) #32, 64, 
+    model = Model(inputs=inputs, outputs=outputs)
 
-    METRIC_ACCURACY = 'accuracy'
 
+    # summarize the model
+    print(model.summary())
+
+    #model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    model.compile(loss='sparse_categorical_crossentropy',
+                  optimizer='adam', metrics=['accuracy'])
+    
+    history = model.fit(xs_training_padded_sequences, all_ys_training, 
+                        batch_size=64, epochs=10, 
+                    )
+
+    model.save_weights("predict_class.h5")
+
+
+    time_stamp = math.floor(time.time() * 1000)
+    model.save("bug_detection_model_"+str(time_stamp))
+
+    time_learning_done = time.time()
+    print("Time for learning (seconds): " +
+          str(round(time_learning_done - time_start)))
     
 
-    with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
-        hp.hparams_config(
-            hparams=[HP_EMBEDDING_DIM, HP_NUM_HEADS, HP_FF_DIM],
-            metrics=[hp.Metric(METRIC_ACCURACY, display_name='Accuracy')],
-        
-  )
-    
-    
-    def train_test_model(hparams):
-        inputs = Input(shape=(max_len,))
-        embedding_layer = TokenAndPositionEmbedding(max_len, vocab_size, hparams[HP_EMBEDDING_DIM])
-        x = embedding_layer(inputs)
-        transformer_block = TransformerBlock(hparams[HP_EMBEDDING_DIM], hparams[HP_NUM_HEADS], hparams[HP_FF_DIM])
-        x = transformer_block(x)
-        x = GlobalAveragePooling1D()(x)
-        x = Dropout(0.2)(x)
-        x = Dense(200, activation="relu", kernel_initializer='normal')(x)
-        x = Dropout(0.2)(x)
-        outputs = Dense(classes, activation="softmax", kernel_initializer='normal')(x)
+    #del shuffled_xs_training
+    #del shuffled_ys_training
+    gc.collect()
 
-        model = Model(inputs=inputs, outputs=outputs)
-
-        initial_learning_rate = 0.001
-        lr_schedule = keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate, decay_steps=6000, decay_rate=0.96, staircase=True
-        )
-
-        optimizer = keras.optimizers.Adam(learning_rate=lr_schedule)
-
-
-        model.compile(
-            loss='sparse_categorical_crossentropy',
-            optimizer=optimizer,
-            metrics=['accuracy']
-        )
-
-
-
-        #early_stopping = EarlyStopping(monitor='loss', patience=2, verbose=1, mode='auto', min_delta=0.01)
-
-        model.fit(xs_training_padded_sequences, all_ys_training, epochs=10, batch_size = 64) #callbacks=[early_stopping]# Run with 1 epoch to speed things up for demo purposes
-        _, accuracy = model.evaluate(xs_validation_padded_sequences, all_ys_validation)
-        return accuracy
-    
-    def run(run_dir, hparams):
-        with tf.summary.create_file_writer(run_dir).as_default():
-            hp.hparams(hparams)  # record the values used in this trial
-            accuracy = train_test_model(hparams)
-            tf.summary.scalar(METRIC_ACCURACY, accuracy, step=1)
-    
-    session_num = 0 #110
-
-    #for num_units in HP_NUM_UNITS.domain.values:
-        #for dropout_rate in (HP_DROPOUT.domain.min_value, HP_DROPOUT.domain.max_value):
-                    #for batch_size in HP_BATCH_SIZE.domain.values:
-    for embedding_dim in HP_EMBEDDING_DIM.domain.values:
-                                for num_heads in HP_NUM_HEADS.domain.values:
-                                    for ff_dim in HP_FF_DIM.domain.values:
-                                        hparams = {
-                                            #HP_NUM_UNITS: num_units,
-                                            #HP_DROPOUT: dropout_rate,
-                                            #HP_BATCH_SIZE: batch_size,
-                                            HP_EMBEDDING_DIM: embedding_dim,
-                                            HP_NUM_HEADS: num_heads,
-                                            HP_FF_DIM: ff_dim
-                                        }
-                                        run_name = "run-%d" % session_num
-                                        print('--- Starting trial: %s' % run_name)
-                                        print({h.name: hparams[h] for h in hparams})
-                                        run('logs/hparam_tuning_old_approach/' + run_name, hparams)
-                                        session_num += 1
+     # validate the model
+    validation_loss = model.evaluate(xs_validation_padded_sequences, all_ys_validation)
+    print()
+    print("Validation loss & accuracy: " + str(validation_loss))
