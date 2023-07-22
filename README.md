@@ -1,11 +1,11 @@
-DeepBugs: Deep Learning to Find Bugs
+Bug Detector a modification of DeepBugs
 ====================================
-
-DeepBugs is a framework for learning name-based bug detectors from an existing code corpus. See [our OOPSLA'18 paper](http://software-lab.org/publications/oopsla2018_DeepBugs.pdf) for a detailed description.
+This is a Bug Detector model which is build on top of the DeepBugs approach. A transformer model for binary & multi classification was implemented in this project.
+DeepBugs Paper:[DeepBugs paper](http://software-lab.org/publications/oopsla2018_DeepBugs.pdf)
 
 Quick Start
 --------------
-
+Here is a simple version from DeepBugs, proposed by the authors:
 A quick and easy way to play with a simplified version of DeepBugs is a [Jupyter notebook, which you can run on Google's Colaboratory](https://colab.research.google.com/github/michaelpradel/DeepBugs/blob/master/DeepBugs.ipynb). To use the full DeepBugs tool, read on.
 
 Overview
@@ -24,6 +24,7 @@ Requirements
 * npm modules (install with `npm install module_name`): acorn, estraverse, walk-sync
 * Python 3
 * Python packages: keras, scipy, numpy, sklearn
+* Further packages used (requirements.txt)
 
 
 JavaScript Corpus
@@ -55,9 +56,9 @@ Each bug detector addresses a particular bug pattern, e.g.:
   * The last argument is a directory that gets recursively scanned for .js files, considering only files listed in the file provided as the second argument.
   * The command produces `calls_*.json` files, which is data suitable for the `SwappedArgs` bug detector. For the other bug two detectors, replace `calls` with `binOps` in the above command.
 
-#### Step 2: Train a classifier to identify bugs
+#### Step 2: Train a model to identify Bugs 
 
-A) Train and validate the classifier
+A) To run the original model from DeepBugs use:
 `python3 python/BugLearnAndValidate.py --pattern SwappedArgs --token_emb token_to_vector.json --type_emb type_to_vector.json --node_emb node_type_to_vector.json --training_data calls_xx*.json --validation_data calls_yy*.json`
 
   * The first argument selects the bug pattern.
@@ -65,61 +66,14 @@ A) Train and validate the classifier
   * The remaining arguments are two lists of .json files. They contain the training and validation data extracted in Step 1.
   * After learning the bug detector, the command measures accurracy and recall w.r.t. seeded bugs and writes a list of potential bugs in the unmodified validation code (see `poss_anomalies.txt`).
 
-B) Train a classifier for later use
-`python3 python/BugLearn.py --pattern SwappedArgs --token_emb token_to_vector.json --type_emb type_to_vector.json --node_emb node_type_to_vector.json --training_data calls_xx*.json`
+B) To run the transformer model for Binary Classification:
 
-  * Optionally, pass --out some/dir to set the output directory for the trained model.
+ 'python3 python/BugLearnAndValidateTransformer.py --pattern SwappedArgs --token_emb token_to_vector.json --training_data calls_training/calls_*.json --validation_data calls_eval/calls_*.json'
+
+C) To run the transformer model for Multi Classification on the three Bug Patterns:
+ 'python3 python/BugLearnAndValidateTransformerMergeMulti.py --token_emb token_to_vector.json --training_data_Swapped merged_buggs_origi/calls_training/calls_*.json --training_data_BinOp merged_buggs_origi/binops_BinOperator_training/binOps_*.json --training_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_training/binOps_*.json  --validation_data_Swapped merged_buggs_origi/calls_eval/calls_*.json  --validation_data_BinOp merged_buggs_origi/binops_BinOperator_eval/binOps_*.json --validation_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_eval/binOps_*.json'
+
+#Note the Directorys of the Bug Dectors need do be modified according your data directory
 
 Note that learning a bug detector from the very small corpus of 50 programs will yield a classifier with low accuracy that is unlikely to be useful. To leverage the full power of DeepBugs, you'll need a larger code corpus, e.g., the [JS150 corpus](http://www.srl.inf.ethz.ch/js150.php) mentioned above.
 
-
-Finding Bugs
--------------------------------
-
-Finding bugs in one or more source files consists of these two steps:
-1) Extract code pieces
-2) Use a trained classifier to identify bugs
-
-#### Step 1: Extract code pieces
-
-`node javascript/extractFromJS.js calls --files <list of files>`
-
-  * <list of files> contains one or more files to be examined. Code pieces can be extracted from any javascript file (.js) given with path specification relative to the main directory.
-  * The command produces `calls_*.json` files, which is data suitable for the `SwappedArgs` bug detector. For the other bug two detectors, replace `calls` with `binOps` in the above command.
-
-#### Step 2: Use a trained classifier to identify bugs
-
-`python3 python/BugFind.py --pattern SwappedArgs --threshold 0.95 --model some/dir --token_emb token_to_vector.json --type_emb type_to_vector.json --node_emb node_type_to_vector.json --testing_data calls_xx*.json`
-
-  * The first argument selects the bug pattern.
-  * 0.95 is the threshold for reporting bugs; higher means fewer warnings of higher certainty.
-  * --model sets the directory to load a trained model from.
-  * The next three arguments are vector representations for tokens (here: identifiers and literals), for types, and for AST node types. These files are provided in the repository.
-  * The remaining argument is a list of .json files. They contain the data extracted in Step 1.
-  * The command examines every code piece and writes a list of potential bugs with its probability of being incorrect
-
-
-Embeddings for Identifiers
-----------------------------------
-
-The above bug detectors rely on a vector representation for identifier names and literals. To use our framework, the easiest is to use the shipped `token_to_vector.json` file. Alternatively, you can learn the embeddings via Word2Vec as follows:
-
-1) Extract identifiers and tokens:
-
-`node javascript/extractFromJS.js tokens --parallel 4 data/js/programs_50_training.txt data/js/programs_50`
-
-  * The command produces `tokens_*.json` files.
-  
-2) Encode identifiers and literals with context into arrays of numbers (for faster reading during learning):
-  
-  `python3 python/TokensToTopTokens.py tokens_*.json`
-  
-  * The arguments are the just created files.
-  * The command produces `encoded_tokens_*.json` files and a file `token_to_number_*.json` that assigns a number to each identifier and literal.
-
-3) Learn embeddings for identifiers and literals:
-  
-  `python3 python/EmbeddingLearnerWord2Vec.py token_to_number_*.json encoded_tokens_*.json`
-
-  * The arguments are the just created files.
-  * The command produces a file `token_to_vector_*.json`.
