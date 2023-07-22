@@ -71,7 +71,13 @@ B) To run the transformer model for Binary Classification:
 
  'python3 python/BugLearnAndValidateTransformer.py --pattern SwappedArgs --token_emb token_to_vector.json --training_data calls_training/calls_*.json --validation_data calls_eval/calls_*.json'
 
-C) To run the transformer model for Multi Classification on the three Bug Patterns:
+C) To run the transformer model three Bug Patterns:
+
+For binary classification:
+
+  'python3 python/BugLearnAndValidateTransformerMergeBinary.py --token_emb token_to_vector.json --training_data_Swapped merged_buggs_origi/calls_training/calls_*.json --training_data_BinOp merged_buggs_origi/binops_BinOperator_training/binOps_*.json --training_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_training/binOps_*.json  --validation_data_Swapped merged_buggs_origi/calls_eval/calls_*.json  --validation_data_BinOp merged_buggs_origi/binops_BinOperator_eval/binOps_*.json --validation_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_eval/binOps_*.json'
+
+For multi classification:
 
  'python3 python/BugLearnAndValidateTransformerMergeMulti.py --token_emb token_to_vector.json --training_data_Swapped merged_buggs_origi/calls_training/calls_*.json --training_data_BinOp merged_buggs_origi/binops_BinOperator_training/binOps_*.json --training_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_training/binOps_*.json  --validation_data_Swapped merged_buggs_origi/calls_eval/calls_*.json  --validation_data_BinOp merged_buggs_origi/binops_BinOperator_eval/binOps_*.json --validation_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_eval/binOps_*.json'
 
