@@ -59,6 +59,7 @@ Each bug detector addresses a particular bug pattern, e.g.:
 #### Step 2: Train a model to identify Bugs 
 
 A) To run the original model from DeepBugs use:
+
 `python3 python/BugLearnAndValidate.py --pattern SwappedArgs --token_emb token_to_vector.json --type_emb type_to_vector.json --node_emb node_type_to_vector.json --training_data calls_xx*.json --validation_data calls_yy*.json`
 
   * The first argument selects the bug pattern.
@@ -71,6 +72,7 @@ B) To run the transformer model for Binary Classification:
  'python3 python/BugLearnAndValidateTransformer.py --pattern SwappedArgs --token_emb token_to_vector.json --training_data calls_training/calls_*.json --validation_data calls_eval/calls_*.json'
 
 C) To run the transformer model for Multi Classification on the three Bug Patterns:
+
  'python3 python/BugLearnAndValidateTransformerMergeMulti.py --token_emb token_to_vector.json --training_data_Swapped merged_buggs_origi/calls_training/calls_*.json --training_data_BinOp merged_buggs_origi/binops_BinOperator_training/binOps_*.json --training_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_training/binOps_*.json  --validation_data_Swapped merged_buggs_origi/calls_eval/calls_*.json  --validation_data_BinOp merged_buggs_origi/binops_BinOperator_eval/binOps_*.json --validation_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_eval/binOps_*.json'
 
 #Note the Directorys of the Bug Dectors need do be modified according your data directory
