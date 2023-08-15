@@ -1,7 +1,8 @@
 Bug Detector a modification of DeepBugs
 ====================================
-This is a Bug Detector model which is build on top of the DeepBugs approach. A transformer model for binary & multi classification was implemented in this project.
-DeepBugs Paper:[DeepBugs paper](http://software-lab.org/publications/oopsla2018_DeepBugs.pdf)
+This is a Bug Detector model based on the DeepBugs approach. A transformer model for binary & multi classification has been implemented in this project.
+
+[DeepBugs paper](http://software-lab.org/publications/oopsla2018_DeepBugs.pdf)
 
 Quick Start
 --------------
@@ -25,12 +26,13 @@ Requirements
 * Python 3
 * Python packages: keras, scipy, numpy, sklearn
 * Further packages used (requirements.txt)
+* Tensorflow
 
 
 JavaScript Corpus
 -----------------------
 
-* The full corpus can be downloaded [here](http://www.srl.inf.ethz.ch/js150.php) and is expected to be stored in `data/js/programs_all`. It consists of 100.000 training files, listed in `data/js/programs_training.txt`, and 50.000 files for validation, listed in `data/js/programs_eval.txt`. 
+* The full corpus can be downloaded [here](http://www.srl.inf.ethz.ch/js150.php) and is expected to be stored in `data/js/programs_all`. It consists of 150.000 training files, listed in `data/js/programs_training.txt`, and 50.000 files for validation, listed in `data/js/programs_eval.txt`. 
 * This repository contains only a very small subset of the corpus. It is stored in `data/js/programs_50`. Training and validation files for the small corpus are listed in `data/js/programs_50_training.txt` and `data/js/programs_50_eval.txt`.
 
 
