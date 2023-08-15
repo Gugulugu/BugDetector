@@ -228,7 +228,7 @@ if __name__ == "__main__":
         shuffled_xs_training,
         shuffled_ys_training,
         batch_size=64,
-        epochs=15,
+        epochs=10,
     )
 
     model.save_weights("predict_class.h5")

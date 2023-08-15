@@ -24,7 +24,7 @@ python3 python/BugLearnAndValidateTransformerSelfEmb.py --token_emb token_to_vec
 --training_data_IncBinOp merged_buggs/binops_IncBinOperand_training/binOps_*.json  --validation_data_IncBinOp merged_buggs/binops_IncBinOperand_eval/binOps_*.json
 
 
-python3 python/BugLearnAndValidateMergeBugsClassif.py --token_emb token_to_vector.json --type_emb type_to_vector.json --node_emb node_type_to_vector.json --training_data_Swapped merged_buggs_origi/calls_training/calls_*.json --training_data_BinOp merged_buggs_origi/binops_BinOperator_training/binOps_*.json --training_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_training/binOps_*.json  --validation_data_Swapped merged_buggs_origi/calls_eval/calls_*.json  --validation_data_BinOp merged_buggs_origi/binops_BinOperator_eval/binOps_*.json --validation_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_eval/binOps_*.json
+python3 python/BugLearnAndValidateTransformerMergeBugsClassif.py --token_emb token_to_vector.json --type_emb type_to_vector.json --node_emb node_type_to_vector.json --training_data_Swapped merged_buggs_origi/calls_training/calls_*.json --training_data_BinOp merged_buggs_origi/binops_BinOperator_training/binOps_*.json --training_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_training/binOps_*.json  --validation_data_Swapped merged_buggs_origi/calls_eval/calls_*.json  --validation_data_BinOp merged_buggs_origi/binops_BinOperator_eval/binOps_*.json --validation_data_IncBinOp merged_buggs_origi/binops_IncBinOperand_eval/binOps_*.json
 
 
 

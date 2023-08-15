@@ -236,6 +236,7 @@ if __name__ == '__main__':
     max_len = max(len(seq) for seq in sequences_train)
     xs_training_padded_sequences = pad_sequences(sequences_train, maxlen=max_len, padding='post')
     vocab_size = len(tokenizer.word_index) + 1
+    print(vocab_size)
 
     # Pad sequences to ensure equal length validation
     #max_len_val = max(len(seq) for seq in sequences_val)

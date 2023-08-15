@@ -40,6 +40,8 @@ import LearningDataBinOperator
 import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
+from Preprocessing import PreprocessingData
+
 
 
 parser = argparse.ArgumentParser()
@@ -216,6 +218,8 @@ if __name__ == '__main__':
     all_ys_validation = np.array(all_ys_validation)
     all_xs_validation = np.array(all_xs_validation)
 
+    all_xs_training = [PreprocessingData.symbols_to_text(x) for x in all_xs_training]
+    all_xs_validation = [PreprocessingData.symbols_to_text(x) for x in all_xs_validation]
 
 
     # Tokenize the data training/validation
@@ -239,9 +243,9 @@ if __name__ == '__main__':
 
 
     # create a model (simple feedforward network)
-    embed_dim = 256  # Embedding size for each token
-    num_heads = 12  # Number of attention heads
-    ff_dim = 128  # Hidden layer size in feed forward network inside transformer
+    embed_dim = 128  # Embedding size for each token
+    num_heads = 16  # Number of attention heads
+    ff_dim = 64  # Hidden layer size in feed forward network inside transformer
 
     inputs = Input(shape=(max_len,))
     embedding_layer = TokenAndPositionEmbedding(max_len, vocab_size, embed_dim)

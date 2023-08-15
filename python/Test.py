@@ -36,7 +36,7 @@ import LearningDataSwappedBinOperands
 import LearningDataIncorrectBinaryOperand
 import LearningDataIncorrectAssignment
 import LearningDataIncorrectArgsType
-from TransformerArchitecture import Transformer
+from python.TransformerPlayground import Transformer
 
 
 parser = argparse.ArgumentParser()
